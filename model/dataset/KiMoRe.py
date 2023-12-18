@@ -65,9 +65,14 @@ class KiMoReDataset(torch.utils.data.Dataset):
         self.subjects = subjects
         self.exercise = exercise
 
+        self.samples = []
+        self.targets = []
+
         self.dirs = [ f'{self.root_dir}/{_subject_types[s]}' for s in subjects]
         for dir in self.dirs:
             self._load_all_from_directory(dir, self.exercise)
+
+        print(f"LOG: loaded exercises samples count: {len(self.samples)}")
 
     def _load_all_from_directory(self, dir, exercise):
         for item in os.listdir(dir):
@@ -78,9 +83,6 @@ class KiMoReDataset(torch.utils.data.Dataset):
     def _load_single_sample(self, dir, exercise):
         base_dir = os.path.join(dir, f'Es{exercise}')
         print(f'LOG: Reading exercise folder of actor {base_dir}')
-
-        self.samples = []
-        self.targets = []
 
         # Load movement data
         raw_file = os.path.join(base_dir, 'Raw')
@@ -109,7 +111,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
                     self._rescale_sample(sample)
 
                     self.samples.append(sample)
-                    print(sample)
+                    print(f"LOG: loaded sample: {sample}")
 
         # Load target data
         target_file = os.path.join(base_dir, 'Label')
