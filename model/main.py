@@ -6,4 +6,5 @@ dataset = KiMoReDataset(
     subjects=['expert']
 )
 
-dataset.visualize_2d(0)
+#dataset.visualize_2d(0)
+dataset.visualize_time_series(0)

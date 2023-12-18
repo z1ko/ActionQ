@@ -19,26 +19,29 @@ _subject_types = {
 _exercise_range = range(0, 5)
 
 # Name of all skeleton joints
-_skeleton_joints = {
-    0:  'spine_base',
-    1:  'spine_mid',
-    2:  'neck',
-    3:  'head',
-    4:  'shoulder_left',
-    8:  'shoulder_right',
-    12: 'hip_left',
-    16: 'hip_right',
-    13: 'knee_left',
-    17: 'knee_right',
-    14: 'ankle_left',
-    18: 'ankle_right',
-    5:  'elbow_left',
-    9:  'elbow_right',
-    6:  'wrist_left',
-    10: 'wrist_right',
-    7:  'hand_left',
-    11: 'hand_right'
-}
+_skeleton_joint_names = [
+    'spine_base',
+    'spine_mid',
+    'neck',
+    'head',
+    'shoulder_left',
+    'elbow_left',
+    'wrist_left',
+    'hand_left',
+    'shoulder_right',
+    'elbow_right',
+    'wrist_right',
+    'hand_right',
+    'hip_left',
+    'knee_left',
+    'ankle_left',
+    'hip_right',
+    'knee_right',
+    'ankle_right',
+    'spine_shoulder'
+]
+
+_skeleton_joint_count = len(_skeleton_joint_names)
 
 class KiMoReDataset(torch.utils.data.Dataset):
     """
@@ -93,7 +96,8 @@ class KiMoReDataset(torch.utils.data.Dataset):
                     f.seek(0)
 
                     print(f'LOG: Loading exercises with {frames} frames')
-                    sample = torch.zeros((3, 19, frames)) # (Features, Joints, Frames)
+                    sample = torch.zeros((3, _skeleton_joint_count, frames)) 
+                    # (Features, Joints, Frames)
 
                     t = 0
                     for line in f.readlines():
@@ -110,7 +114,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
         # Load target data
         target_file = os.path.join(base_dir, 'Label')
         for item in os.listdir(target_file):
-            if item.startswith('ClinicalAssessment'):
+            if item.startswith('ClinicalAssessment') and item.endswith('.csv'):
                 with open(os.path.join(target_file, item)) as f:
                     line = f.readlines()[1].split(',')
                     target = torch.Tensor(3) # TS PO CF
@@ -123,6 +127,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
 
     def _parse_joint_pos_line(self, sample, line, t):
         tokens = line.split(',')[:-1]
+        assert(len(tokens) // 4 == 25)
 
         j = 0
         for i in range(0, 25):
@@ -130,7 +135,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
             # Skip some unimportant joints (feet, hands)
             if i in [15, 19, 21, 22, 23, 24]:
                 continue
-           
+          
             sample[0, j, t] = float(tokens[j * 4 + 0])
             sample[1, j, t] = float(tokens[j * 4 + 1])
             sample[2, j, t] = float(tokens[j * 4 + 2])
@@ -231,6 +236,23 @@ class KiMoReDataset(torch.utils.data.Dataset):
 
         a = matplotlib.animation.FuncAnimation(fig, update, 
                                                frames=frames, interval=30)
+        plt.show()
+
+    def visualize_time_series(self, idx):
+        sample = self.samples[idx]
+        coords = ['x', 'y']
+
+        _, axs = plt.subplots(5, (_skeleton_joint_count + 5) // 6)
+        for joint, ax in enumerate(axs.flat):
+            if joint < 19:
+                joint_name = _skeleton_joint_names[joint]
+                ax.set_title(joint_name)
+                for i in range(2):
+                    ax.plot(sample[i, joint, :])
+
+                ax.legend(coords, loc='upper right')
+
+        plt.tight_layout()
         plt.show()
 
     def __len__(self):
