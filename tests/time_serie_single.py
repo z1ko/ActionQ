@@ -4,7 +4,6 @@ import lightning as L
 import matplotlib.pyplot as plt
 import torch
 
-import actionq
 from actionq.s4d import S4D
 
 # TODO: make time series more difficult
@@ -30,4 +29,5 @@ for ws in range(min_window_size, max_window_size + 1):
         samples.append(sample)
         targets.append(target)
 
-
+model = S4D(1, 4)
+print(model)

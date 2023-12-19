@@ -158,53 +158,88 @@ class KiMoReDataset(torch.utils.data.Dataset):
         print(f"LOG: rescaling [{min_x}, {max_x}] -> [-1, 1]")
         sample = (sample - min_x) / delta * 2.0 - 1.0
 
-    def visualize(self, idx):
-        """
-            Visualize a sample in the dataset
-            NOTE: The depth dimension is terrible
-        """
-        
-        # Skeleton edges
-        edges = [
-            [0, 1], [1, 20], [2, 20], [2, 3], [4, 20], [8, 20],
-            [4, 5], [8, 9], [0, 12], [0, 16], [12, 13], [16, 17]
-        ]
+#    def visualize(self, idx):
+#        """
+#            Visualize a sample in the dataset
+#            NOTE: The depth dimension is terrible
+#        """
+#        
+#        # Skeleton edges
+#        edges = [
+#            [0, 1], [1, 20], [2, 20], [2, 3], [4, 20], [8, 20],
+#            [4, 5], [8, 9], [0, 12], [0, 16], [12, 13], [16, 17]
+#        ]
+#
+#        sample = self.samples[idx]
+#        frames = sample.size(-1)
+#
+#        fig = plt.figure()
+#        axs = fig.add_subplot(111, projection='3d')
+#
+#        xs = sample[0, :, :] #torch.rand((10, frames))
+#        ys = sample[1, :, :] #torch.rand((10, frames))
+#        zs = sample[2, :, :] #torch.rand((10, frames))
+#        print(xs.shape)
+#
+#        # Draw Joints
+#        graph, = axs.plot(
+#            xs[:, 0], ys[:, 0], zs[:, 0],
+#            linestyle="", marker="o"
+#        )
+#
+#        # Draw Bones
+#        for bone in edges:
+#            plt.plot(
+#                [xs[bone[0], 0], xs[bone[1], 0]],
+#                [ys[bone[0], 0], ys[bone[1], 0]],
+#                [zs[bone[0], 0], zs[bone[1], 0]]
+#            )
+#
+#        def update(frame):
+#            axs.set_title(f"{frame}")
+#            graph.set_data(xs[:, frame], ys[:, frame])
+#            graph.set_3d_properties(zs[:, frame])
+#
+#        print(f"Animating sample(frames={frames})")
+#        a = matplotlib.animation.FuncAnimation(fig, update, frames=frames, interval=24)
+#        plt.show()
 
-        sample = self.samples[idx]
-        frames = sample.size(-1)
+    def __len__(self):
+        return len(self.samples)
 
-        fig = plt.figure()
-        axs = fig.add_subplot(111, projection='3d')
+    def __getitem__(self, idx):
+        return self.samples[idx]
 
-        xs = sample[0, :, :] #torch.rand((10, frames))
-        ys = sample[1, :, :] #torch.rand((10, frames))
-        zs = sample[2, :, :] #torch.rand((10, frames))
-        print(xs.shape)
 
-        # Draw Joints
-        graph, = axs.plot(
-            xs[:, 0], ys[:, 0], zs[:, 0],
-            linestyle="", marker="o"
-        )
+class KiMoReDataModule(L.LightningDataModule):
+    """
+        Dataloader for the KiMoRe dataset
+    """
 
-        # Draw Bones
-        for bone in edges:
-            plt.plot(
-                [xs[bone[0], 0], xs[bone[1], 0]],
-                [ys[bone[0], 0], ys[bone[1], 0]],
-                [zs[bone[0], 0], zs[bone[1], 0]]
-            )
+    def __init__(self, root_dir, batch_size, exercise, subjects):
+        super().__init__()
+        self.batch_size = batch_size
+        self.root_dir = root_dir
+        self.exercise = exercise
+        self.subjects = subjects
 
-        def update(frame):
-            axs.set_title(f"{frame}")
-            graph.set_data(xs[:, frame], ys[:, frame])
-            graph.set_3d_properties(zs[:, frame])
+    def setup(self, _stage: str):
+        self.dataset_total = KiMoReDataset(self.root_dir, self.exercise, self.subjects)
+        self.dataset_train, self.dataset_val = random_split(
+            self.dataset_total, 
+            [0.8, 0.2], 
+            torch.Generator().manual_seed(69)
+        ) # TODO: Remove manual seed
 
-        print(f"Animating sample(frames={frames})")
-        a = matplotlib.animation.FuncAnimation(fig, update, frames=frames, interval=24)
-        plt.show()
+    def train_dataloader(self):
+        return DataLoader(self.dataset_train, self.batch_size)
 
-    def visualize_2d(self, idx):
+    def val_dataloader(self):
+        return DataLoader(self.dataset_val, self.batch_size)
+
+class KiMoReDataVisualizer:
+
+    def visualize_2d(self, sample):
 
         # Skeleton edges
         #edges = [
@@ -212,39 +247,36 @@ class KiMoReDataset(torch.utils.data.Dataset):
         #    [4, 5], [8, 9], [0, 12], [0, 16], [12, 13], [16, 17]
         #]
 
-        sample = self.samples[idx]
-        frames = sample.size(-1)
+       frames = sample.size(-1)
 
-        fig = plt.figure()
-        axs = fig.add_subplot(111)
-        plt.xlim(-1.0, 1.0)
-        plt.ylim(-1.0, 1.0)
+       fig = plt.figure()
+       axs = fig.add_subplot(111)
+       plt.xlim(-1.0, 1.0)
+       plt.ylim(-1.0, 1.0)
 
-        xs = sample[0, :, :] #torch.rand((10, frames))
-        ys = sample[1, :, :] #torch.rand((10, frames))
+       xs = sample[0, :, :] #torch.rand((10, frames))
+       ys = sample[1, :, :] #torch.rand((10, frames))
 
-        # Draw bones 2d
-        #bones = []
-        #for edge in edges:
-        #    a, b = edge
-        #    bone, = axs.plot([xs[a, 0], xs[b, 0]], [ys[a, 0], ys[b, 0]])
-        #    bones.append(bone)
+       # Draw bones 2d
+       #bones = []
+       #for edge in edges:
+       #    a, b = edge
+       #    bone, = axs.plot([xs[a, 0], xs[b, 0]], [ys[a, 0], ys[b, 0]])
+       #    bones.append(bone)
 
-        # Draw joints 2d
-        graph, = axs.plot(xs[:, 0], ys[:, 0], linestyle="", marker="o")
-        def update(frame):
-            graph.set_data(xs[:, frame], ys[:, frame])
-            axs.set_title(f'frame: {frame}/{frames}')
-            return graph,
+       # Draw joints 2d
+       graph, = axs.plot(xs[:, 0], ys[:, 0], linestyle="", marker="o")
+       def update(frame):
+           graph.set_data(xs[:, frame], ys[:, frame])
+           axs.set_title(f'frame: {frame}/{frames}')
+           return graph,
 
-        a = matplotlib.animation.FuncAnimation(fig, update, 
+       a = matplotlib.animation.FuncAnimation(fig, update, 
                                                frames=frames, interval=30)
-        plt.show()
+       plt.show()
 
-    def visualize_time_series(self, idx):
-        sample = self.samples[idx]
+    def visualize_time_series(self, sample):
         coords = ['x', 'y']
-
         _, axs = plt.subplots(5, (_skeleton_joint_count + 5) // 6)
         for joint, ax in enumerate(axs.flat):
             if joint < 19:
@@ -258,35 +290,6 @@ class KiMoReDataset(torch.utils.data.Dataset):
         plt.tight_layout()
         plt.show()
 
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        return self.samples[idx]
-
-
-#def KiMoReDataModule(L.LightningDataModule):
-#    def __init__(self, root_dir, batch_size, exercise, subjects):
-#        super().__init__()
-#        self.batch_size = batch_size
-#        self.root_dir = root_dir
-#        self.exercise = exercise
-#        self.subjects = subjects
-#
-#    def setup(self, _stage: str):
-#        self.dataset_total = KiMoReDataset(self.root_dir, self.exercise, self.subjects)
-#        self.dataset_train, self.dataset_val = random_split(
-#            self.dataset_total, 
-#            [0.8, 0.2], 
-#            torch.Generator().manual_seed(69)
-#        ) # TODO: Remove manual seed
-#
-#    def train_dataloader(self):
-#        return DataLoader(self.dataset_train, self.batch_size)
-#
-#    def val_dataloader(self):
-#        return DataLoader(self.dataset_val, self.batch_size)
-#
 
 
 
