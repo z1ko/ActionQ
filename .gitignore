@@ -1,2 +1,5 @@
+
+# Dataset must be downloaded elsewhere
 dataset/
-__pycache__
+
+**/__pycache__
