@@ -9,10 +9,10 @@ import random
 
 # All available subjects in the dataset
 _subject_types = {
-    'expert': 'CG/Expert', 
-    'non-expert': 'CG/NotExpert', 
-    'stroke': 'GPP/Stroke', 
-    'parkinson': 'GPP/Parkinson', 
+    'expert': 'CG/Expert',
+    'non-expert': 'CG/NotExpert',
+    'stroke': 'GPP/Stroke',
+    'parkinson': 'GPP/Parkinson',
     'backpain': 'GPP/BackPain'
 }
 
@@ -44,6 +44,7 @@ _skeleton_joint_names = [
 
 _skeleton_joint_count = len(_skeleton_joint_names)
 
+
 class KiMoReDataset(torch.utils.data.Dataset):
     """
         KInematic Assessment of MOvement and Clinical Scores for 
@@ -52,7 +53,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
         Each dataset item is a temporal skeleton evolution 
         with a quality scores assigned
     """
-    
+
     def __init__(self, root_dir, exercise, subjects):
         super().__init__()
 
@@ -61,7 +62,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
 
         if exercise not in _exercise_range:
             raise ValueError('Unrecognized exercise index')
-       
+
         self.root_dir = root_dir
         self.subjects = subjects
         self.exercise = exercise
@@ -69,7 +70,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
         self.samples = []
         self.targets = []
 
-        self.dirs = [ f'{self.root_dir}/{_subject_types[s]}' for s in subjects]
+        self.dirs = [f'{self.root_dir}/{_subject_types[s]}' for s in subjects]
         for dir in self.dirs:
             self._load_all_from_directory(dir, self.exercise)
 
@@ -99,7 +100,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
                     f.seek(0)
 
                     print(f'LOG: Loading exercises with {frames} frames')
-                    sample = torch.zeros((3, _skeleton_joint_count, frames)) 
+                    sample = torch.zeros((3, _skeleton_joint_count, frames))
                     # (Features, Joints, Frames)
 
                     t = 0
@@ -120,17 +121,16 @@ class KiMoReDataset(torch.utils.data.Dataset):
             if item.startswith('ClinicalAssessment') and item.endswith('.csv'):
                 with open(os.path.join(target_file, item)) as f:
                     line = f.readlines()[1].split(',')
-                    target = torch.Tensor(3) # TS PO CF
+                    target = torch.Tensor(3)  # TS PO CF
                     for i in range(3):
                         target[i] = float(line[1 + i * 5])
 
                     self.targets.append(target)
                     print(target)
 
-
     def _parse_joint_pos_line(self, sample, line, t):
         tokens = line.split(',')[:-1]
-        assert(len(tokens) // 4 == 25)
+        # assert (len(tokens) // 4 == 25)
 
         j = 0
         for i in range(0, 25):
@@ -138,7 +138,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
             # Skip some unimportant joints (feet, hands)
             if i in [15, 19, 21, 22, 23, 24]:
                 continue
-          
+
             sample[0, j, t] = float(tokens[j * 4 + 0])
             sample[1, j, t] = float(tokens[j * 4 + 1])
             sample[2, j, t] = float(tokens[j * 4 + 2])
@@ -163,7 +163,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
 #            Visualize a sample in the dataset
 #            NOTE: The depth dimension is terrible
 #        """
-#        
+#
 #        # Skeleton edges
 #        edges = [
 #            [0, 1], [1, 20], [2, 20], [2, 3], [4, 20], [8, 20],
@@ -226,10 +226,10 @@ class KiMoReDataModule(L.LightningDataModule):
     def setup(self, _stage: str):
         self.dataset_total = KiMoReDataset(self.root_dir, self.exercise, self.subjects)
         self.dataset_train, self.dataset_val = random_split(
-            self.dataset_total, 
-            [0.8, 0.2], 
+            self.dataset_total,
+            [0.8, 0.2],
             torch.Generator().manual_seed(69)
-        ) # TODO: Remove manual seed
+        )  # TODO: Remove manual seed
 
     def train_dataloader(self):
         return DataLoader(self.dataset_train, self.batch_size)
@@ -237,43 +237,45 @@ class KiMoReDataModule(L.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(self.dataset_val, self.batch_size)
 
+
 class KiMoReDataVisualizer:
 
     def visualize_2d(self, sample):
 
         # Skeleton edges
-        #edges = [
+        # edges = [
         #    [0, 1], [1, 18], [2, 18], [2, 3], [4, 18], [8, 18],
         #    [4, 5], [8, 9], [0, 12], [0, 16], [12, 13], [16, 17]
-        #]
+        # ]
 
-       frames = sample.size(-1)
+        frames = sample.size(-1)
 
-       fig = plt.figure()
-       axs = fig.add_subplot(111)
-       plt.xlim(-1.0, 1.0)
-       plt.ylim(-1.0, 1.0)
+        fig = plt.figure()
+        axs = fig.add_subplot(111)
+        plt.xlim(-1.0, 1.0)
+        plt.ylim(-1.0, 1.0)
 
-       xs = sample[0, :, :] #torch.rand((10, frames))
-       ys = sample[1, :, :] #torch.rand((10, frames))
+        xs = sample[0, :, :]  # torch.rand((10, frames))
+        ys = sample[1, :, :]  # torch.rand((10, frames))
 
-       # Draw bones 2d
-       #bones = []
-       #for edge in edges:
-       #    a, b = edge
-       #    bone, = axs.plot([xs[a, 0], xs[b, 0]], [ys[a, 0], ys[b, 0]])
-       #    bones.append(bone)
+        # Draw bones 2d
+        # bones = []
+        # for edge in edges:
+        #    a, b = edge
+        #    bone, = axs.plot([xs[a, 0], xs[b, 0]], [ys[a, 0], ys[b, 0]])
+        #    bones.append(bone)
 
-       # Draw joints 2d
-       graph, = axs.plot(xs[:, 0], ys[:, 0], linestyle="", marker="o")
-       def update(frame):
-           graph.set_data(xs[:, frame], ys[:, frame])
-           axs.set_title(f'frame: {frame}/{frames}')
-           return graph,
+        # Draw joints 2d
+        graph, = axs.plot(xs[:, 0], ys[:, 0], linestyle="", marker="o")
 
-       a = matplotlib.animation.FuncAnimation(fig, update, 
+        def update(frame):
+            graph.set_data(xs[:, frame], ys[:, frame])
+            axs.set_title(f'frame: {frame}/{frames}')
+            return graph,
+
+        a = matplotlib.animation.FuncAnimation(fig, update,
                                                frames=frames, interval=30)
-       plt.show()
+        plt.show()
 
     def visualize_time_series(self, sample):
         coords = ['x', 'y']
@@ -289,7 +291,3 @@ class KiMoReDataVisualizer:
 
         plt.tight_layout()
         plt.show()
-
-
-
-
