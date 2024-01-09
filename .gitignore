@@ -1,6 +1,7 @@
 
 # Dataset must be downloaded elsewhere
 data/
+logs/
 
 # Byte compiled / optimized / DLL files
 __pycache__/

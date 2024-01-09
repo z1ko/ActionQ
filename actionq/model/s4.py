@@ -2045,6 +2045,7 @@ class S4Model(nn.Module):
         """
         Input x is shape (B, L, d_input)
         """
+
         x = self.encoder(x)  # (B, L, d_input) -> (B, L, d_model)
 
         x = x.transpose(-1, -2)  # (B, L, d_model) -> (B, d_model, L)
@@ -2069,10 +2070,12 @@ class S4Model(nn.Module):
                 # Postnorm
                 x = norm(x.transpose(-1, -2)).transpose(-1, -2)
 
-        x = x.transpose(-1, -2)
+        x = x.transpose(-1, -2)  # (B, d_model, L) -> (B, L, d_model)
 
         # Pooling: average pooling over the sequence length
-        x = x.mean(dim=1)
+        x = x.mean(dim=1)  # (B, L, d_model) -> (B, d_model)
 
         # Decode the outputs
         x = self.decoder(x)  # (B, d_model) -> (B, d_output)
+
+        return x

@@ -158,52 +158,6 @@ class KiMoReDataset(torch.utils.data.Dataset):
         print(f"LOG: rescaling [{min_x}, {max_x}] -> [-1, 1]")
         sample = (sample - min_x) / delta * 2.0 - 1.0
 
-#    def visualize(self, idx):
-#        """
-#            Visualize a sample in the dataset
-#            NOTE: The depth dimension is terrible
-#        """
-#
-#        # Skeleton edges
-#        edges = [
-#            [0, 1], [1, 20], [2, 20], [2, 3], [4, 20], [8, 20],
-#            [4, 5], [8, 9], [0, 12], [0, 16], [12, 13], [16, 17]
-#        ]
-#
-#        sample = self.samples[idx]
-#        frames = sample.size(-1)
-#
-#        fig = plt.figure()
-#        axs = fig.add_subplot(111, projection='3d')
-#
-#        xs = sample[0, :, :] #torch.rand((10, frames))
-#        ys = sample[1, :, :] #torch.rand((10, frames))
-#        zs = sample[2, :, :] #torch.rand((10, frames))
-#        print(xs.shape)
-#
-#        # Draw Joints
-#        graph, = axs.plot(
-#            xs[:, 0], ys[:, 0], zs[:, 0],
-#            linestyle="", marker="o"
-#        )
-#
-#        # Draw Bones
-#        for bone in edges:
-#            plt.plot(
-#                [xs[bone[0], 0], xs[bone[1], 0]],
-#                [ys[bone[0], 0], ys[bone[1], 0]],
-#                [zs[bone[0], 0], zs[bone[1], 0]]
-#            )
-#
-#        def update(frame):
-#            axs.set_title(f"{frame}")
-#            graph.set_data(xs[:, frame], ys[:, frame])
-#            graph.set_3d_properties(zs[:, frame])
-#
-#        print(f"Animating sample(frames={frames})")
-#        a = matplotlib.animation.FuncAnimation(fig, update, frames=frames, interval=24)
-#        plt.show()
-
     def __len__(self):
         return len(self.samples)
 
