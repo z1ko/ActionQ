@@ -67,6 +67,9 @@ class KiMoReDataset(torch.utils.data.Dataset):
         self.subjects = subjects
         self.exercise = exercise
 
+        self.max_frames_count = 0
+        self.min_frames_count = 1e6
+
         self.samples = []
         self.targets = []
 
@@ -75,6 +78,8 @@ class KiMoReDataset(torch.utils.data.Dataset):
             self._load_all_from_directory(dir, self.exercise)
 
         print(f"LOG: loaded exercises samples count: {len(self.samples)}")
+        print(f"LOG: max frames count: {self.max_frames_count}")
+        print(f"LOG: min frames count: {self.min_frames_count}")
 
     def _load_all_from_directory(self, dir, exercise):
         for item in os.listdir(dir):
@@ -92,19 +97,27 @@ class KiMoReDataset(torch.utils.data.Dataset):
             if item.startswith('JointPosition'):
                 with open(os.path.join(raw_file, item)) as f:
 
-                    # Count frames
+                    # Count Frames
                     frames = 0
                     for line in f.readlines():
                         if len(line) >= 25:
                             frames += 1
-                    f.seek(0)
+
+                    self.max_frames_count = max(self.max_frames_count, frames)
+                    self.min_frames_count = min(self.min_frames_count, frames)
+
+                    # Use a fixed lenght for the samples.
+                    # TODO: find a way to use different lenghts
+                    frames = 500
 
                     print(f'LOG: Loading exercises with {frames} frames')
                     sample = torch.zeros((3, _skeleton_joint_count, frames))
                     # (Features, Joints, Frames)
 
                     t = 0
+                    f.seek(0)
                     for line in f.readlines():
+                        if t >= frames: break
                         if len(line) >= 25:
                             self._parse_joint_pos_line(sample, line, t)
                             t += 1
@@ -130,7 +143,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
 
     def _parse_joint_pos_line(self, sample, line, t):
         tokens = line.split(',')[:-1]
-        # assert (len(tokens) // 4 == 25)
+        assert (len(tokens) // 4 == 25)
 
         j = 0
         for i in range(0, 25):
@@ -177,7 +190,7 @@ class KiMoReDataModule(L.LightningDataModule):
         self.exercise = exercise
         self.subjects = subjects
 
-    def setup(self, _stage: str):
+    def setup(self, _stage: str = ''):
         self.dataset_total = KiMoReDataset(self.root_dir, self.exercise, self.subjects)
         self.dataset_train, self.dataset_val = random_split(
             self.dataset_total,

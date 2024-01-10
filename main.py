@@ -1,22 +1,22 @@
-# from actionq.dataset.KiMoRe import KiMoReDataModule, KiMoReDataVisualizer
+from torch.utils.data import DataLoader
+from actionq.dataset.KiMoRe import KiMoReDataModule, KiMoReDataVisualizer
 #
-# dataset = KiMoReDataModule(
-#     root_dir='data/KiMoRe',
-#     batch_size=1,
-#     subjects=['expert'],
-#     exercise=1
-# )
-#
-# dataset.setup('')
-#
-# dataloader = dataset.train_dataloader()
-# print(len(dataloader))
-#
-# visualizer = KiMoReDataVisualizer()
-# sample = next(next(iter(dataloader)))[0]
-# print(sample)
-#
-# visualizer.visualize_2d(sample)
+dataset = KiMoReDataModule(
+    root_dir='data/KiMoRe',
+    batch_size=1,
+    subjects=['expert'],
+    exercise=1
+)
+
+dataset.setup()
+dataloader = DataLoader(dataset.dataset_total)
+
+visualizer = KiMoReDataVisualizer()
+for batch in dataloader:
+    sample = batch[0]
+    visualizer.visualize_2d(sample)
+
+exit(0)
 
 import torch
 import torch.functional as F
@@ -139,18 +139,18 @@ class TimeserieDataModule(L.LightningDataModule):
     def val_dataloader(self):
         return torch.utils.data.DataLoader(self.dataset_val, self.batch_size, num_workers=15)
 
-
-logger = TensorBoardLogger('logs')
-
-model = S4Model(d_input=1, d_output=1, d_model=256, n_layers=4)
-model = ActionQ(model, 0.001, 0.01, 20)
-print(model)
-
-data = TimeserieDataModule(20, 10)
-data.setup()
-
-trainer = L.Trainer(max_epochs=20, logger=logger)
-trainer.fit(model, train_dataloaders=data.train_dataloader(), val_dataloaders=data.val_dataloader())
+#data = TimeserieDataModule(20, 10)
+#data.setup()
+#
+#logger = TensorBoardLogger('logs')
+#
+#model = S4Model(d_input=1, d_output=1, d_model=256, n_layers=4)
+#model = ActionQ(model, 0.001, 0.01, 20)
+#print(model)
+#
+#
+#trainer = L.Trainer(max_epochs=20, logger=logger)
+#trainer.fit(model, train_dataloaders=data.train_dataloader(), val_dataloaders=data.val_dataloader())
 
 
 # sup
