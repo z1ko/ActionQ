@@ -47,10 +47,10 @@ _skeleton_joint_count = len(_skeleton_joint_names)
 
 class KiMoReDataset(torch.utils.data.Dataset):
     """
-        KInematic Assessment of MOvement and Clinical Scores for 
+        KInematic Assessment of MOvement and Clinical Scores for
         Remote Monitoring of Physical REhabilitation
 
-        Each dataset item is a temporal skeleton evolution 
+        Each dataset item is a temporal skeleton evolution
         with a quality scores assigned
     """
 
@@ -103,21 +103,26 @@ class KiMoReDataset(torch.utils.data.Dataset):
                         if len(line) >= 25:
                             frames += 1
 
+                    # Skip samples with too few frames
+                    if frames < 400:
+                        continue
+
                     self.max_frames_count = max(self.max_frames_count, frames)
                     self.min_frames_count = min(self.min_frames_count, frames)
 
                     # Use a fixed lenght for the samples.
                     # TODO: find a way to use different lenghts
-                    frames = 500
+                    frames = 400
 
-                    print(f'LOG: Loading exercises with {frames} frames')
+                    print(f'LOG: Loading exercises with {frames} frames at {item}')
                     sample = torch.zeros((3, _skeleton_joint_count, frames))
                     # (Features, Joints, Frames)
 
                     t = 0
                     f.seek(0)
                     for line in f.readlines():
-                        if t >= frames: break
+                        if t >= frames:
+                            break
                         if len(line) >= 25:
                             self._parse_joint_pos_line(sample, line, t)
                             t += 1
@@ -133,6 +138,8 @@ class KiMoReDataset(torch.utils.data.Dataset):
         for item in os.listdir(target_file):
             if item.startswith('ClinicalAssessment') and item.endswith('.csv'):
                 with open(os.path.join(target_file, item)) as f:
+                    print(f'LOG: loading assessment for {target_file}')
+
                     line = f.readlines()[1].split(',')
                     target = torch.Tensor(3)  # TS PO CF
                     for i in range(3):
@@ -143,7 +150,10 @@ class KiMoReDataset(torch.utils.data.Dataset):
 
     def _parse_joint_pos_line(self, sample, line, t):
         tokens = line.split(',')[:-1]
-        assert (len(tokens) // 4 == 25)
+        if len(tokens) // 4 != 25:
+            print(f'error in tokens lenght ({len(tokens)}): {tokens}')
+            print(line)
+            a = input()
 
         j = 0
         for i in range(0, 25):
@@ -175,7 +185,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        return self.samples[idx]
+        return self.samples[idx], self.targets[idx]
 
 
 class KiMoReDataModule(L.LightningDataModule):
@@ -191,23 +201,28 @@ class KiMoReDataModule(L.LightningDataModule):
         self.subjects = subjects
 
     def setup(self, _stage: str = ''):
-        self.dataset_total = KiMoReDataset(self.root_dir, self.exercise, self.subjects)
-        self.dataset_train, self.dataset_val = random_split(
-            self.dataset_total,
-            [0.8, 0.2],
-            torch.Generator().manual_seed(69)
-        )  # TODO: Remove manual seed
+        self.total = KiMoReDataset(self.root_dir, self.exercise, self.subjects)
+        self.train, self.val, self.test = torch.utils.data.random_split(
+            self.total, [0.8, 0.1, 0.1], torch.Generator())
+
+        print(f'LOG: total samples count: {len(self.total)}')
+        print(f'LOG: train samples count: {len(self.train)}')
+        print(f'LOG: val   samples count: {len(self.val)}')
+        print(f'LOG: test  samples count: {len(self.test)}')
 
     def train_dataloader(self):
-        return DataLoader(self.dataset_train, self.batch_size)
+        return DataLoader(self.train, self.batch_size)
 
     def val_dataloader(self):
-        return DataLoader(self.dataset_val, self.batch_size)
+        return DataLoader(self.val, self.batch_size)
+
+    def test_dataloader(self):
+        return DataLoader(self.test, self.batch_size)
 
 
 class KiMoReDataVisualizer:
 
-    def visualize_2d(self, sample):
+    def visualize_2d(self, item):
 
         # Skeleton edges
         # edges = [
@@ -215,6 +230,7 @@ class KiMoReDataVisualizer:
         #    [4, 5], [8, 9], [0, 12], [0, 16], [12, 13], [16, 17]
         # ]
 
+        sample, _ = item
         frames = sample.size(-1)
 
         fig = plt.figure()
@@ -244,7 +260,9 @@ class KiMoReDataVisualizer:
                                                frames=frames, interval=30)
         plt.show()
 
-    def visualize_time_series(self, sample):
+    def visualize_time_series(self, item):
+        sample, _ = item
+
         coords = ['x', 'y']
         _, axs = plt.subplots(5, (_skeleton_joint_count + 5) // 6)
         for joint, ax in enumerate(axs.flat):

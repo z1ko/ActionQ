@@ -2009,73 +2009,173 @@ class S4Block(nn.Module):
         return self.d_model
 
 
-class S4Model(nn.Module):
+class AQS4Block(nn.Module):
+    """ Simple wrapper around S4Block, with dropout, normalization and residual connection
+    """
 
+    def __init__(self, d_model, **s4b_args):
+        super().__init__()
+
+        self.norm = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout1d()
+        self.s4 = S4Block(
+            d_model, **s4b_args
+        )
+
+    def forward(self, x):
+        res = x
+        z, _ = self.s4(x)
+        x = self.dropout(z) + res
+        x = self.norm(x)
+        return x
+
+
+class AQS4(nn.Module):
     def __init__(
         self,
-        d_input,
-        d_output,
-        d_model,
-        n_layers,
-        dropout=0.2,
-        prenorm=False,
+        joint_features,     # Features for each joint
+        joint_count,        # Number of joints
+        joint_expansion,    # New dimension of joint features
+        layers_count,       # Number of S4 blocks in sequence
+        d_output,           # Dimension of the output
+        dropout=0.2,        # Dropout factor
     ):
         super().__init__()
 
-        self.prenorm = prenorm
+        # Dimension of the inner model
+        self.d_model = joint_count * joint_expansion
+        self.joint_count = joint_count
+        self.d_output = d_output
+        self.d_joint = joint_expansion
 
-        # Linear encoder (d_input = 1 for grayscale and 3 for RGB)
-        self.encoder = nn.Linear(d_input, d_model)
+        print(f'INFO: {joint_count} joints with {joint_features} features each are expanded to {joint_expansion}.')
+        print(f'INFO: inner model has size of {self.d_model} and it is processed with s4 blocks {layers_count} times.')
+        print(f'INFO: then resulting features are again mixed and combined in the {d_output} dims output.')
 
-        # Stack S4 layers as residual blocks
-        self.s4_layers = nn.ModuleList()
-        self.norms = nn.ModuleList()
-        self.dropouts = nn.ModuleList()
-        for _ in range(n_layers):
-            self.s4_layers.append(
-                S4Block(d_model, mode='diag', dropout=dropout, transposed=True, lr=0.001)
+        # S4Blocks initialization
+        self.layers = nn.ModuleList()
+        for _ in range(layers_count):
+            self.layers.append(
+                AQS4Block(
+                    self.d_model,
+                    mode='diag',        # TODO: Test different initialization modes.
+                    dropout=dropout,
+                    transposed=False,   # Accepted shape: (B, L, F)
+                    lr=0.001,           # TODO: Test bigger learning rates.
+                    n_ssm=None,
+                    final_act='glu'     # TODO: Test different activation functions.
+                )
             )
-            self.norms.append(nn.LayerNorm(d_model))
-            self.dropouts.append(nn.Dropout1d())
 
-        # Linear decoder
-        self.decoder = nn.Linear(d_model, d_output)
+        # Project each joint features to a different space dimension
+        self.encoder = nn.Sequential(
+            nn.Linear(joint_features, joint_expansion),
+            nn.ReLU()   # TODO: Test different activation function (GLU).
+        )
+
+        # At the end each joint features are concatenated and processed
+        # TODO: Add some hidden layer?
+        self.decoder = nn.Linear(self.d_model, self.d_output)
 
     def forward(self, x):
+        """ Input x shape: (B, L, J, F)
         """
-        Input x is shape (B, L, d_input)
-        """
 
-        x = self.encoder(x)  # (B, L, d_input) -> (B, L, d_model)
+        B, L, J, F = x.shape
 
-        x = x.transpose(-1, -2)  # (B, L, d_model) -> (B, d_model, L)
-        for layer, norm, dropout in zip(self.s4_layers, self.norms, self.dropouts):
-            # Each iteration of this loop will map (B, d_model, L) -> (B, d_model, L)
+        # Change features dimensions (B, L, J, K)
+        x = self.encoder(x)
 
-            z = x
-            if self.prenorm:
-                # Prenorm
-                z = norm(z.transpose(-1, -2)).transpose(-1, -2)
+        # Compact last dimensions (B, L, JK)
+        x = x.view(B, L, J * self.d_joint)
 
-            # Apply S4 block: we ignore the state input and output
-            z, _ = layer(z)
+        # Process temporal sequence
+        for layer in self.layers:
+            x = layer(x)
 
-            # Dropout on the output of the S4 block
-            z = dropout(z)
+        # TODO: Decide how to treat the resulting output, pooling of all outputs?
+        # Keep only the last? (Better for online inference I think)
+        x = x[:, -1, :]  # (B, JK)
 
-            # Residual connection
-            x = z + x
+        # TODO: Return to joint features to use the GNN
+        # x = x.view(B, L, J, self.d_joint)
 
-            if not self.prenorm:
-                # Postnorm
-                x = norm(x.transpose(-1, -2)).transpose(-1, -2)
+        y = self.decoder(x)  # (B, d_output)
+        return y
 
-        x = x.transpose(-1, -2)  # (B, d_model, L) -> (B, L, d_model)
 
-        # Pooling: average pooling over the sequence length
-        x = x.mean(dim=1)  # (B, L, d_model) -> (B, d_model)
-
-        # Decode the outputs
-        x = self.decoder(x)  # (B, d_model) -> (B, d_output)
-
-        return x
+# class S4Model(nn.Module):
+#
+#    def __init__(
+#        self,
+#        d_input,
+#        d_output,
+#        d_model,
+#        n_layers,
+#        n_ssm=None,
+#        dropout=0.2,
+#        prenorm=False,
+#    ):
+#        super().__init__()
+#
+#        self.prenorm = prenorm
+#
+#        # Linear encoder (d_input = 1 for grayscale and 3 for RGB)
+#        self.encoder = nn.Linear(d_input, d_model)
+#
+#        # Stack S4 layers as residual blocks
+#        self.s4_layers = nn.ModuleList()
+#        self.norms = nn.ModuleList()
+#        self.dropouts = nn.ModuleList()
+#        for _ in range(n_layers):
+#            self.s4_layers.append(
+#                S4Block(d_model, mode='diag', dropout=dropout, transposed=True, lr=0.001, n_ssm=n_ssm)
+#            )
+#            self.norms.append(nn.LayerNorm(d_model))
+#            self.dropouts.append(nn.Dropout1d())
+#
+#        # Linear decoder
+#        self.decoder = nn.Linear(d_model, d_output)
+#
+#    def forward(self, x):
+#        """
+#        Input x is shape (B, L, d_input)
+#        """
+#
+#        # Dont mix features here!
+#        # x = self.encoder(x)  # (B, L, d_input) -> (B, L, d_model)
+#
+#        x = x.transpose(-1, -2)  # (B, L, d_model) -> (B, d_model, L)
+#        for layer, norm, dropout in zip(self.s4_layers, self.norms, self.dropouts):
+#            # Each iteration of this loop will map (B, d_model, L) -> (B, d_model, L)
+#
+#            z = x
+#            if self.prenorm:
+#                # Prenorm
+#                z = norm(z.transpose(-1, -2)).transpose(-1, -2)
+#
+#            # Apply S4 block: we ignore the state input and output
+#            z, _ = layer(z)
+#
+#            # Dropout on the output of the S4 block
+#            z = dropout(z)
+#
+#            # Residual connection
+#            x = z + x
+#
+#            if not self.prenorm:
+#                # Postnorm
+#                x = norm(x.transpose(-1, -2)).transpose(-1, -2)
+#
+#        x = x.transpose(-1, -2)  # (B, d_model, L) -> (B, L, d_model)
+#
+#        # Pooling: average pooling over the sequence length
+#        # x = x.mean(dim=1)  # (B, L, d_model) -> (B, d_model)
+#
+#        # Keep only last output
+#        x = x[:, -1, :]
+#
+#        # Decode the outputs
+#        x = self.decoder(x)  # (B, d_model) -> (B, d_output)
+#
+#        return x

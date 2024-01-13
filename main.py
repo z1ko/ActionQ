@@ -1,66 +1,73 @@
+from lightning.pytorch.loggers import TensorBoardLogger
+import lightning as L
+from actionq.model.s4 import AQS4
+import matplotlib.pyplot as plt
+import torch.functional as F
+import torch
 from torch.utils.data import DataLoader
 from actionq.dataset.KiMoRe import KiMoReDataModule, KiMoReDataVisualizer
+from einops import rearrange
 #
 dataset = KiMoReDataModule(
     root_dir='data/KiMoRe',
-    batch_size=1,
-    subjects=['expert'],
+    batch_size=8,
+    subjects=['expert', 'non-expert', 'stroke', 'parkinson', 'backpain'],
     exercise=1
 )
 
 dataset.setup()
-dataloader = DataLoader(dataset.dataset_total)
 
-visualizer = KiMoReDataVisualizer()
-for batch in dataloader:
-    sample = batch[0]
-    visualizer.visualize_2d(sample)
+#
+# visualizer = KiMoReDataVisualizer()
+# for batch in dataloader:
+#    sample = batch[0]
+#    visualizer.visualize_2d(sample)
+#
 
-exit(0)
-
-import torch
-import torch.functional as F
-import matplotlib.pyplot as plt
-from actionq.model.s4 import S4Model
-import lightning as L
-from lightning.pytorch.loggers import TensorBoardLogger
+train_dataloader = dataset.train_dataloader()
+val_dataloader = dataset.val_dataloader()
+test_dataloader = dataset.test_dataloader()
 
 
 class ActionQ(L.LightningModule):
-    def __init__(self, model, lr, weight_decay, epochs):
+    def __init__(self, model, lr, weight_decay, epochs=-1):
         super().__init__()
         self.model = model
         self.lr = lr
         self.weight_decay = weight_decay
         self.epochs = epochs
 
-    def training_step(self, batch, batch_idx):
-        samples, targets = batch
-        results = self.model(samples)
-        results.squeeze_()
+    def forward(self, samples):  # (B, F, J, L)
+        samples = samples.permute(0, -1, -2, -3)  # (B, L, J, F)
+        return self.model(samples)
 
+    def training_step(self, batch, batch_idx):
+        samples, targets = batch  # samples: (B, F, J, L)
+        results = self.forward(samples)
         loss = torch.nn.functional.l1_loss(results, targets)
         self.log('loss/l1/train', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        samples, targets = batch
-        results = self.model(samples)
-        results.squeeze_()
+        samples, targets = batch  # samples: (B, F, J, L)
+        results = self.forward(samples)
 
-        loss = torch.nn.functional.l1_loss(results, targets)
-        self.log('loss/l1/val', loss)
+        mad_loss = torch.nn.functional.l1_loss(results, targets)
+        self.log('loss/l1/val', mad_loss)
 
-    def test_step(self, batch, batch_idx):
-        samples, targets = batch
-        results = self.model(samples)
-        results.squeeze_()
+        rmse_loss = torch.sqrt(torch.nn.functional.mse_loss(results, targets))
+        self.log('loss/rmse/val', rmse_loss)
 
-        loss = torch.nn.functional.l1_loss(results, targets)
-        self.log('loss/l1/test', loss)
+    # def test_step(self, batch, batch_idx):
+    #    samples, targets = batch
+    #    results = self.model(samples)
+    #    results.squeeze_()
+    #
+    #    loss = torch.nn.functional.l1_loss(results, targets)
+    #    self.log('loss/l1/test', loss)
 
     def configure_optimizers(self):
-        all_parameters = list(model.parameters())
+        all_parameters = list(self.model.parameters())
 
         # General parameters don't contain the special _optim key
         params = [p for p in all_parameters if not hasattr(p, "_optim")]
@@ -84,13 +91,13 @@ class ActionQ(L.LightningModule):
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.epochs)
 
         # Print optimizer info
-        # keys = sorted(set([k for hp in hps for k in hp.keys()]))
-        # for i, g in enumerate(optimizer.param_groups):
-        #    group_hps = {k: g.get(k, None) for k in keys}
-        #    print(' | '.join([
-        #        f"Optimizer group {i}",
-        #        f"{len(g['params'])} tensors",
-        #    ] + [f"{k} {v}" for k, v in group_hps.items()]))
+        keys = sorted(set([k for hp in hps for k in hp.keys()]))
+        for i, g in enumerate(optimizer.param_groups):
+            group_hps = {k: g.get(k, None) for k in keys}
+            print(' | '.join([
+                f"Optimizer group {i}",
+                f"{len(g['params'])} tensors",
+            ] + [f"{k} {v}" for k, v in group_hps.items()]))
 
         return {
             'optimizer': optimizer,
@@ -98,59 +105,11 @@ class ActionQ(L.LightningModule):
         }
 
 
-# TODO: make time-serie more difficult
-class TimeserieDataset(torch.utils.data.Dataset):
-    def __init__(self, window_size):
-        super().__init__()
-        xs = torch.linspace(0.0, 1000.0, 10000)
-        self.ys = torch.sin(xs) + torch.cos(xs * 0.3) * 0.6
-        self.ws = window_size
+logger = TensorBoardLogger('logs')
 
-        # plt.plot(self.ys)
-        # plt.show()
+# model = S4Model(d_input=57, d_output=3, d_model=57, n_layers=4)
+model = AQS4(joint_features=3, joint_count=19, joint_expansion=32, layers_count=4, d_output=3)
+model = ActionQ(model, 0.001, 0.01)
 
-    def __len__(self):
-        return len(self.ys) - self.ws
-
-    def __getitem__(self, idx):
-        sample = self.ys[idx:idx + self.ws]
-        sample.unsqueeze_(-1)
-        target = self.ys[idx + self.ws]
-        return sample, target
-
-
-class TimeserieDataModule(L.LightningDataModule):
-    def __init__(self, window_size, batch_size):
-        super().__init__()
-        self.window_size = window_size
-        self.batch_size = batch_size
-
-    def setup(self, _stage: str = ''):
-        self.dataset_total = TimeserieDataset(self.window_size)
-        self.dataset_train, self.dataset_val = torch.utils.data.random_split(
-            self.dataset_total,
-            [0.8, 0.2],
-            torch.Generator()
-        )
-
-    def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.dataset_train, self.batch_size, num_workers=15)
-
-    def val_dataloader(self):
-        return torch.utils.data.DataLoader(self.dataset_val, self.batch_size, num_workers=15)
-
-#data = TimeserieDataModule(20, 10)
-#data.setup()
-#
-#logger = TensorBoardLogger('logs')
-#
-#model = S4Model(d_input=1, d_output=1, d_model=256, n_layers=4)
-#model = ActionQ(model, 0.001, 0.01, 20)
-#print(model)
-#
-#
-#trainer = L.Trainer(max_epochs=20, logger=logger)
-#trainer.fit(model, train_dataloaders=data.train_dataloader(), val_dataloaders=data.val_dataloader())
-
-
-# sup
+trainer = L.Trainer(max_epochs=400, logger=logger)
+trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
