@@ -1,7 +1,7 @@
 
-# Dataset must be downloaded elsewhere
 data/
 logs/
+venv/
 
 # Byte compiled / optimized / DLL files
 __pycache__/
