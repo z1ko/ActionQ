@@ -13,10 +13,7 @@ SUBJECT_TYPES = {
 }
 
 # Where the dataset is stored
-ROOT_DIR = "data/KiMoRe"
-
-# Windows size for frames
-WINDOW_SIZE = 100
+ROOT_DIR = "data/raw/KiMoRe"
 
 # Joints of the body
 JOINTS_COUNT = 25
@@ -40,9 +37,9 @@ def _load_single_exercise(samples, data_descriptor, filepath):
                     data_descriptor['joint'] = joint
 
                     # Insert data unit
-                    data_descriptor['pos_x'] = float(tokens[joint * 4 + 0]),
-                    data_descriptor['pos_y'] = float(tokens[joint * 4 + 1]),
-                    data_descriptor['pos_z'] = float(tokens[joint * 4 + 2]),
+                    data_descriptor['pos_x'] = float(tokens[joint * 4 + 0])
+                    data_descriptor['pos_y'] = float(tokens[joint * 4 + 1])
+                    data_descriptor['pos_z'] = float(tokens[joint * 4 + 2])
 
                     # Merge data
                     for key, value in samples.items():
@@ -54,7 +51,8 @@ def _load_evaluations(targets, data_descriptor, filepath):
         _, values = f.readline(), f.readline()
         tokens = values.split(',')
         print(tokens)
-        for exercise in range(5):  # TODO: Maybe data is broken, check correct number of elements
+        for exercise in range(5):
+            # TODO: Maybe data is broken, check correct number of elements
 
             eval_descriptor = copy.deepcopy(data_descriptor)
             eval_descriptor['exercise'] = exercise
@@ -67,84 +65,84 @@ def _load_evaluations(targets, data_descriptor, filepath):
                 targets[key].append(eval_descriptor[key])
 
 
-# Resulting samples
-samples = {
+if __name__ == '__main__':
 
-    # Metadata
-    'type': [],
-    'subject': [],
-    'exercise': [],
-    'frame': [],
-    'joint': [],
+    # Resulting samples
+    samples = {
 
-    # Effective data
-    'pos_x': [],
-    'pos_y': [],
-    'pos_z': []
-}
+        # Metadata
+        'type': [],
+        'subject': [],
+        'exercise': [],
+        'frame': [],
+        'joint': [],
 
-# Resulting target for each exercise
-targets = {
+        # Effective data
+        'pos_x': [],
+        'pos_y': [],
+        'pos_z': []
+    }
 
-    # Metadata
-    'type': [],
-    'subject': [],
-    'exercise': [],
+    # Resulting target for each exercise
+    targets = {
 
-    # Effective data
-    'TS': [],
-    'PO': [],
-    'CF': []
-}
+        # Metadata
+        'type': [],
+        'subject': [],
+        'exercise': [],
 
-# Dict for a single data entry
-data_descriptor = {}
+        # Effective data
+        'TS': [],
+        'PO': [],
+        'CF': []
+    }
 
-# Load all data
-for subject_type in SUBJECT_TYPES.values():
-    data_descriptor['type'] = subject_type
+    # Dict for a single data entry
+    data_descriptor = {}
 
-    path = os.path.join(ROOT_DIR, subject_type)
-    subjects_list = [f.name for f in os.scandir(path) if f.is_dir()]
-    for subject in subjects_list:
-        data_descriptor['subject'] = subject
+    # Load all data
+    for subject_type in SUBJECT_TYPES.values():
+        data_descriptor['type'] = subject_type
 
-        # The dataset is strange, all exercises folders have the same label file containing the evaluations
-        # of all the exercises, such a waste of space. Process only the first one
-        loaded_evaluations = False
+        path = os.path.join(ROOT_DIR, subject_type)
+        subjects_list = [f.name for f in os.scandir(path) if f.is_dir()]
+        for subject in subjects_list:
+            data_descriptor['subject'] = subject
 
-        # Process all exercises
-        subject_path = os.path.join(path, subject)
-        exercises_list = [f.name for f in os.scandir(subject_path) if f.is_dir()]
-        for exercise in exercises_list:
-            data_descriptor['exercise'] = int(exercise[-1:])
+            # The dataset is strange, all exercises folders have the same label file containing the evaluations
+            # of all the exercises, such a waste of space. Process only the first one...
+            loaded_evaluations = False
 
-            print(f'processing {subject_type}/{subject}/{exercise}')
-            exercise_path = os.path.join(subject_path, exercise)
+            # Process all exercises
+            subject_path = os.path.join(path, subject)
+            exercises_list = [f.name for f in os.scandir(subject_path) if f.is_dir()]
+            for exercise in exercises_list:
+                data_descriptor['exercise'] = int(exercise[-1:])
 
-            # Process evaluation data
-            if not loaded_evaluations:
-                exercises_eval_path = os.path.join(exercise_path, 'Label')
-                if os.path.exists(exercises_eval_path):
-                    for file in os.scandir(exercises_eval_path):
-                        if file.name.startswith('ClinicalAssessment') and file.name.endswith('.csv'):
-                            _load_evaluations(targets, data_descriptor, file.path)
-                            loaded_evaluations = True
-                            break
+                print(f'processing {subject_type}/{subject}/{exercise}')
+                exercise_path = os.path.join(subject_path, exercise)
 
-            # Process frame data
-            exercise_raw_path = os.path.join(exercise_path, 'Raw')
-            if os.path.exists(exercise_raw_path):
-                for file in os.scandir(exercise_raw_path):
-                    if file.name.startswith('JointPosition'):
-                        _load_single_exercise(samples, data_descriptor, file.path)
+                # Process evaluation data
+                if not loaded_evaluations:
+                    exercises_eval_path = os.path.join(exercise_path, 'Label')
+                    if os.path.exists(exercises_eval_path):
+                        for file in os.scandir(exercises_eval_path):
+                            if file.name.startswith('ClinicalAssessment') and file.name.endswith('.csv'):
+                                _load_evaluations(targets, data_descriptor, file.path)
+                                loaded_evaluations = True
+                                break
 
+                # Process frame data
+                exercise_raw_path = os.path.join(exercise_path, 'Raw')
+                if os.path.exists(exercise_raw_path):
+                    for file in os.scandir(exercise_raw_path):
+                        if file.name.startswith('JointPosition'):
+                            _load_single_exercise(samples, data_descriptor, file.path)
 
-# Convert dict to dataframe for faster loading and analysis
-data_df = pd.DataFrame.from_dict(samples)
-data_df.to_parquet('data/processed/kimore_samples.parquet.gzip', compression='gzip')
-print(f'processed KiMoRe samples:\n{data_df}')
+    data_df = pd.DataFrame.from_dict(samples)
+    data_df.to_parquet('data/processed/kimore_samples.parquet.gzip', compression='gzip')
+    print(f'processed KiMoRe samples:\n{data_df}')
 
-targets_df = pd.DataFrame.from_dict(targets)
-targets_df.to_parquet('data/processed/kimore_targets.parquet.gzip', compression='gzip')
-print(f'processed KiMoRe targets:\n{targets_df}')
+    targets_df = pd.DataFrame.from_dict(targets)
+    targets_df.to_parquet('data/processed/kimore_targets.parquet.gzip', compression='gzip')
+    print(f'processed KiMoRe targets:\n{targets_df}')
