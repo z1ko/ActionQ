@@ -105,9 +105,8 @@ class ActionQ(L.LightningModule):
         }
 
 
-logger = TensorBoardLogger('logs')
+logger = TensorBoardLogger(save_dir='./logs')
 
-# model = S4Model(d_input=57, d_output=3, d_model=57, n_layers=4)
 model = AQS4(joint_features=3, joint_count=19, joint_expansion=32, layers_count=4, d_output=3)
 model = ActionQ(model, 0.001, 0.01)
 

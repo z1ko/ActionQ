@@ -5,6 +5,7 @@ import matplotlib.animation
 import matplotlib.pyplot as plt
 import os
 import random
+import pandas as pd
 
 
 # All available subjects in the dataset
@@ -44,6 +45,34 @@ _skeleton_joint_names = [
 
 _skeleton_joint_count = len(_skeleton_joint_names)
 
+class KiMoReDataset2(torch.utils.data.Dataset):
+    """
+        KInematic Assessment of MOvement and Clinical Scores for
+        Remote Monitoring of Physical REhabilitation
+
+        Each dataset item is a temporal skeleton evolution
+        with a quality scores assigned
+    """
+
+    def __init__(self, exercise):
+        super().__init__()
+
+        # Load samples from processed dataset
+        samples_path = 'data/processed/kimore_samples.parquet.gzip'
+        df = pd.read_parquet(samples_path)
+        self.samples_df = df[df['exercise'] == exercise]
+
+
+        # Load targets from processed dataset
+        targets_path = 'data/processed/kimore_targets.parquet.gzip'
+        df = pd.read_parquet(targets_path)
+        self.targets_df = df[df['exercise'] == exercise]
+
+    def __len__(self):
+        return len(self.targets_df)
+
+    def __getitem__(self, idx):
+        return self.targets_df[idx]
 
 class KiMoReDataset(torch.utils.data.Dataset):
     """
@@ -214,6 +243,9 @@ class KiMoReDataModule(L.LightningDataModule):
         return DataLoader(self.train, self.batch_size)
 
     def val_dataloader(self):
+        # TODO: Validation is evaluated on a single batch,
+        # maybe it is better to set the batch_size to the 
+        # size of the entire validation set.
         return DataLoader(self.val, self.batch_size)
 
     def test_dataloader(self):
