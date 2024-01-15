@@ -1,4 +1,5 @@
 
+import argparse
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -28,18 +29,15 @@ SKELETON_JOINT_NAMES = [
     'TODO(?)'
 ]
 
-if len(sys.argv) != 3:
-    print('args: <subject> <exercise>')
-    exit(1)
-
-arg_subject = sys.argv[1]
-arg_exercise = int(sys.argv[2])
+parser = argparse.ArgumentParser()
+parser.add_argument('-s', '--subject')
+parser.add_argument('-e', '--exercise')
+args = parser.parse_args()
 
 # ===================================================================================
 # Style configuration
 
 mpl.style.use('seaborn-v0_8-deep')
-
 mpl.rcParams['figure.figsize'] = (20, 5)
 mpl.rcParams['figure.dpi'] = 100
 
@@ -63,11 +61,11 @@ def _plot_joint(df, subject, exercise, joint, ax):
 
 joints = list(samples_df['joint'].unique())
 fig, ax = plt.subplots(nrows=(len(joints) + 4 - 1) // 4, ncols=4, sharex=True, figsize=(20, 10))
-fig.suptitle(f'subject = {arg_subject}, exercise = {arg_exercise}', fontsize=16)
+fig.suptitle(f'subject = {args.subject}, exercise = {args.exercise}', fontsize=16)
 fax = ax.flatten()
 
 for i, joint in enumerate(joints):
-    _plot_joint(samples_df, arg_subject, arg_exercise, joint, fax[i])
+    _plot_joint(samples_df, args.subject, args.exercise, joint, fax[i])
 
 fig.tight_layout()
 fig.subplots_adjust(top=0.88)
