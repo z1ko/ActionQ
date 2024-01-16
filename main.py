@@ -5,9 +5,18 @@ import matplotlib.pyplot as plt
 import torch.functional as F
 import torch
 from torch.utils.data import DataLoader
-from actionq.dataset.KiMoRe import KiMoReDataModule, KiMoReDataVisualizer
+from actionq.dataset.KiMoRe import KiMoReDataModule, KiMoReDataVisualizer, KiMoReDataset2
 from einops import rearrange
+
+
+D = KiMoReDataset2(exercise=1, rescale_samples=True)
+
+#visualizer = KiMoReDataVisualizer()
+#for i, sample in enumerate(D):
+#    visualizer.visualize_2d(sample)
 #
+#exit(0)
+
 dataset = KiMoReDataModule(
     root_dir='data/KiMoRe',
     batch_size=8,

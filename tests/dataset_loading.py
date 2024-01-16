@@ -5,6 +5,18 @@ import torch
 EXERCISE = 1
 FEATURES = ['pos_x', 'pos_y', 'pos_z']
 
+targets_path = 'data/processed/kimore_targets.parquet.gzip'
+targets_df = pd.read_parquet(targets_path)
+targets_df = targets_df[targets_df['exercise'] == 1]
+
+for name, _ in targets_df.groupby('subject'):
+    print(name)
+
+targets_df.set_index('subject', inplace=True)
+print(targets_df)
+
+exit(0)
+
 samples = []
 
 # Load samples from processed dataset

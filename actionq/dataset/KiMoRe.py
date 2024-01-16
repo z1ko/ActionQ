@@ -4,9 +4,8 @@ import lightning as L
 import matplotlib.animation
 import matplotlib.pyplot as plt
 import os
-import random
 import pandas as pd
-
+import numpy as np
 
 # All available subjects in the dataset
 _subject_types = {
@@ -43,6 +42,10 @@ _skeleton_joint_names = [
     'spine_shoulder'
 ]
 
+# Features the model is allowed to use
+_features = ['pos_x', 'pos_y', 'pos_z']
+_features_count = len(_features)
+
 _skeleton_joint_count = len(_skeleton_joint_names)
 
 class KiMoReDataset2(torch.utils.data.Dataset):
@@ -54,25 +57,72 @@ class KiMoReDataset2(torch.utils.data.Dataset):
         with a quality scores assigned
     """
 
-    def __init__(self, exercise):
+    def __init__(self, exercise, rescale_samples=False):
         super().__init__()
 
-        # Load samples from processed dataset
-        samples_path = 'data/processed/kimore_samples.parquet.gzip'
-        df = pd.read_parquet(samples_path)
-        self.samples_df = df[df['exercise'] == exercise]
-
+        self.samples = []
 
         # Load targets from processed dataset
         targets_path = 'data/processed/kimore_targets.parquet.gzip'
         df = pd.read_parquet(targets_path)
-        self.targets_df = df[df['exercise'] == exercise]
+        df = df[df['exercise'] == exercise]
+        
+        subject_target_map = {}
+        for subject, target in df.groupby('subject'):
+            target = target[['TS', 'PO', 'CF']].to_numpy()
+            subject_target_map[subject] = torch.tensor(target, dtype=torch.float32)
+
+        print(subject_target_map)
+
+        # Load samples from processed dataset
+        samples_path = 'data/processed/kimore_samples.parquet.gzip'
+        df = pd.read_parquet(samples_path)
+        df = df[df['exercise'] == exercise]
+
+        # Transform dataframe to tensor samples
+        for name, subject in df.groupby('subject'):
+            subject.set_index(['frame', 'joint'], inplace=True)
+            subject = subject[_features]
+
+            # Use index to obtain tensor dimensionality
+            frames_count = len(subject.index.get_level_values(0).unique())
+            joints_count = len(subject.index.get_level_values(1).unique())
+
+            try:
+                sample = torch.tensor(subject.to_numpy())
+                sample = sample.reshape(frames_count, joints_count, _features_count)
+                target = subject_target_map[name]
+
+                if rescale_samples:
+                    self._rescale_sample(sample)
+
+                self.samples.append((sample, target))
+
+            except Exception as e:
+                print('WARNING: ', e)
+
+
+    def _rescale_sample(self, sample):
+        # TODO: This is hardcoded to 2 dimensions only
+
+        mean_x = torch.mean(sample[:, :, 0])
+        mean_y = torch.mean(sample[:, :, 1])
+
+        sample[:, :, 0] -= mean_x
+        sample[:, :, 1] -= mean_y
+
+        max_x = torch.max(sample)
+        min_x = torch.min(sample)
+        delta = max_x + min_x
+
+        print(f"LOG: rescaling [{min_x}, {max_x}] -> [-1, 1]")
+        sample = (sample - min_x) / delta * 2.0 - 1.0
 
     def __len__(self):
-        return len(self.targets_df)
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        return self.targets_df[idx]
+        return self.samples[idx]
 
 class KiMoReDataset(torch.utils.data.Dataset):
     """
@@ -263,6 +313,7 @@ class KiMoReDataVisualizer:
         # ]
 
         sample, _ = item
+        sample = sample.permute(-1, 1, 0)
         frames = sample.size(-1)
 
         fig = plt.figure()
