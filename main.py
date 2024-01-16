@@ -5,23 +5,23 @@ import matplotlib.pyplot as plt
 import torch.functional as F
 import torch
 from torch.utils.data import DataLoader
-from actionq.dataset.KiMoRe import KiMoReDataModule, KiMoReDataVisualizer, KiMoReDataset2
+from actionq.dataset.KiMoRe import KiMoReDataModule, KiMoReDataVisualizer, KiMoReDataset
 from einops import rearrange
 
 
-D = KiMoReDataset2(exercise=1, rescale_samples=True)
-
+#D = KiMoReDataset(exercise=1, window_size=400, rescale_samples=True)
+#
 #visualizer = KiMoReDataVisualizer()
 #for i, sample in enumerate(D):
 #    visualizer.visualize_2d(sample)
+#    if i > 10: break
 #
 #exit(0)
 
 dataset = KiMoReDataModule(
-    root_dir='data/KiMoRe',
-    batch_size=8,
-    subjects=['expert', 'non-expert', 'stroke', 'parkinson', 'backpain'],
-    exercise=1
+    batch_size=4,
+    exercise=1,
+    window_size=400
 )
 
 dataset.setup()
@@ -46,19 +46,19 @@ class ActionQ(L.LightningModule):
         self.weight_decay = weight_decay
         self.epochs = epochs
 
-    def forward(self, samples):  # (B, F, J, L)
-        samples = samples.permute(0, -1, -2, -3)  # (B, L, J, F)
+    def forward(self, samples):  # (B, L, J, F)
+        #print(samples.shape)
         return self.model(samples)
 
     def training_step(self, batch, batch_idx):
-        samples, targets = batch  # samples: (B, F, J, L)
+        samples, targets = batch 
         results = self.forward(samples)
         loss = torch.nn.functional.l1_loss(results, targets)
         self.log('loss/l1/train', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        samples, targets = batch  # samples: (B, F, J, L)
+        samples, targets = batch
         results = self.forward(samples)
 
         mad_loss = torch.nn.functional.l1_loss(results, targets)
@@ -114,10 +114,10 @@ class ActionQ(L.LightningModule):
         }
 
 
-logger = TensorBoardLogger(save_dir='./logs')
+logger = TensorBoardLogger('./logs')
 
-model = AQS4(joint_features=3, joint_count=19, joint_expansion=32, layers_count=4, d_output=3)
+model = AQS4(joint_features=3, joint_count=19, joint_expansion=16, layers_count=2, d_output=3)
 model = ActionQ(model, 0.001, 0.01)
 
-trainer = L.Trainer(max_epochs=400, logger=logger)
+trainer = L.Trainer(max_epochs=10, logger=logger, log_every_n_steps=5)
 trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
