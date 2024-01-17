@@ -1,5 +1,20 @@
 import torch
+import torch.nn as nn
 import lightning as L
+
+# Module responsable to convert a sequence of states to a another representation
+class SequenceDecoder(nn.Module):
+    def __init__(self, d_input, d_output, l_input, l_output, mode):
+        super().__init__()
+        
+        self.d_input = d_input
+        self.d_output = d_output
+        self.l_input = l_input
+        self.l_output = l_output
+
+        # TODO
+
+        pass
 
 class ActionQ(L.LightningModule):
     def __init__(self, model, lr, weight_decay, epochs=-1):
@@ -10,33 +25,28 @@ class ActionQ(L.LightningModule):
         self.epochs = epochs
 
     def forward(self, samples):  # (B, L, J, F)
-        #print(samples.shape)
         return self.model(samples)
 
     def training_step(self, batch, batch_idx):
         samples, targets = batch 
         results = self.forward(samples)
-        loss = torch.nn.functional.l1_loss(results, targets)
-        self.log('train-loss-mae', loss)
+        
+        loss = torch.nn.functional.mse_loss(results, targets)
+        self.log('train-loss-mse', loss)
+
+        self.log('train-loss-mae',  torch.nn.functional.l1_loss(results, targets))
+        self.log('train-loss-rmae', torch.sqrt(torch.nn.functional.mse_loss(results, targets)))
+
         return loss
 
     def validation_step(self, batch, batch_idx):
         samples, targets = batch
         results = self.forward(samples)
 
-        mad_loss = torch.nn.functional.l1_loss(results, targets)
-        self.log('validation-loss-mae', mad_loss)
+        self.log('validation-loss-mae',  torch.nn.functional.l1_loss(results, targets))
+        self.log('validation-loss-mse',  torch.nn.functional.mse_loss(results, targets))
+        self.log('validation-loss-rmse', torch.sqrt(torch.nn.functional.mse_loss(results, targets)))
 
-        rmse_loss = torch.sqrt(torch.nn.functional.mse_loss(results, targets))
-        self.log('validation-loss-rmse', rmse_loss)
-
-    # def test_step(self, batch, batch_idx):
-    #    samples, targets = batch
-    #    results = self.model(samples)
-    #    results.squeeze_()
-    #
-    #    loss = torch.nn.functional.l1_loss(results, targets)
-    #    self.log('loss/l1/test', loss)
 
     def configure_optimizers(self):
         all_parameters = list(self.model.parameters())
@@ -63,13 +73,13 @@ class ActionQ(L.LightningModule):
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.epochs)
 
         # Print optimizer info
-        keys = sorted(set([k for hp in hps for k in hp.keys()]))
-        for i, g in enumerate(optimizer.param_groups):
-            group_hps = {k: g.get(k, None) for k in keys}
-            print(' | '.join([
-                f"Optimizer group {i}",
-                f"{len(g['params'])} tensors",
-            ] + [f"{k} {v}" for k, v in group_hps.items()]))
+        #keys = sorted(set([k for hp in hps for k in hp.keys()]))
+        #for i, g in enumerate(optimizer.param_groups):
+        #    group_hps = {k: g.get(k, None) for k in keys}
+        #    print(' | '.join([
+        #        f"Optimizer group {i}",
+        #        f"{len(g['params'])} tensors",
+        #    ] + [f"{k} {v}" for k, v in group_hps.items()]))
 
         return {
             'optimizer': optimizer,

@@ -2053,9 +2053,9 @@ class AQS4(nn.Module):
         print(f'INFO: then resulting features are again mixed and combined in the {d_output} dims output.')
 
         # S4Blocks initialization
-        self.layers = nn.ModuleList()
+        self.layers_temporal = nn.ModuleList()
         for _ in range(layers_count):
-            self.layers.append(
+            self.layers_temporal.append(
                 AQS4Block(
                     self.d_model,
                     mode='diag',        # TODO: Test different initialization modes.
@@ -2063,19 +2063,23 @@ class AQS4(nn.Module):
                     transposed=False,   # Accepted shape: (B, L, F)
                     lr=0.001,           # TODO: Test bigger learning rates.
                     n_ssm=None,
-                    final_act='glu'     # TODO: Test different activation functions.
+                    final_act='relu'    # TODO: Test different activation functions.
                 )
             )
 
         # Project each joint features to a different space dimension
         self.encoder = nn.Sequential(
             nn.Linear(joint_features, joint_expansion),
-            nn.ReLU()   # TODO: Test different activation function (GLU).
+            #nn.ReLU(),  # TODO: Test different activation function (GLU).
+            #nn.Linear(joint_expansion, joint_expansion)
         )
 
         # At the end each joint features are concatenated and processed
-        # TODO: Add some hidden layer?
-        self.decoder = nn.Linear(self.d_model, self.d_output)
+        self.decoder = nn.Sequential(
+            #nn.Linear(self.d_model, self.d_model),
+            #nn.ReLU(),  # TODO: Test different activation function (GLU).
+            nn.Linear(self.d_model, self.d_output)
+        )
 
     def forward(self, x):
         """ Input x shape: (B, L, J, F)
@@ -2090,15 +2094,16 @@ class AQS4(nn.Module):
         x = x.view(B, L, J * self.d_joint)
 
         # Process temporal sequence
-        for layer in self.layers:
+        for layer in self.layers_temporal:
             x = layer(x)
 
         # TODO: Decide how to treat the resulting output, pooling of all outputs?
         # Keep only the last? (Better for online inference I think)
         x = x[:, -1, :]  # (B, JK)
 
-        # TODO: Return to joint features to use the GNN
-        # x = x.view(B, L, J, self.d_joint)
+        # TODO: Propagate each joint features to neighbours
+        # nodes = x.view(B, J, self.d_joint)
+        # nodes = propagate(A, nodes)
 
         y = self.decoder(x)  # (B, d_output)
         return y
