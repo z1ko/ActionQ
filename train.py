@@ -1,9 +1,15 @@
+import argparse
 import lightning as L
 from lightning.pytorch.loggers import CometLogger
 
 from actionq.model.s4 import AQS4
 from actionq.dataset.KiMoRe import KiMoReDataModule
 from actionq.model.regression import ActionQ
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-e', '--epochs', default=100, type=int)
+parser.add_argument('-lr', '--learning_rate', default=0.001)
+args = parser.parse_args()
 
 # Experiment configuration
 parameters = {
@@ -12,9 +18,9 @@ parameters = {
     # Number of frames for each sample
     'window_size': 250,
     # How many layers of S4 are used to model the time sequence
-    'layers_count': 1,
+    'layers_count': 4,
     # Expansion of each joint features
-    'joint_expansion': 8
+    'joint_expansion': 4
 }
 
 dataset = KiMoReDataModule(
@@ -51,8 +57,8 @@ model = AQS4(
     d_output=1 # Clinical Total Score
 )
 
-model = ActionQ(model, lr=0.001, weight_decay=0.01)
-trainer = L.Trainer(max_epochs=100, logger=logger)
+model = ActionQ(model, lr=args.learning_rate, weight_decay=0.01)
+trainer = L.Trainer(max_epochs=args.epochs, logger=logger)
 trainer.fit(model, 
     train_dataloaders=train_dataloader, 
     val_dataloaders=val_dataloader,

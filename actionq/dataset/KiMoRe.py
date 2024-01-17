@@ -168,7 +168,7 @@ class KiMoReDataModule(L.LightningDataModule):
         )
         
         self.train, self.val, self.test = torch.utils.data.random_split(
-            self.total, [0.8, 0.2, 0.0], torch.Generator())
+            self.total, [0.8, 0.1, 0.1], torch.Generator())
 
         print(f'LOG: total samples count: {len(self.total)}')
         print(f'LOG: train samples count: {len(self.train)}')
@@ -176,13 +176,25 @@ class KiMoReDataModule(L.LightningDataModule):
         print(f'LOG: test  samples count: {len(self.test)}')
 
     def train_dataloader(self):
-        return DataLoader(self.train, self.batch_size)
+        return DataLoader(
+            self.train, 
+            self.batch_size,
+            shuffle=True
+        )
 
     def val_dataloader(self):
         # TODO: Validation is evaluated on a single batch,
         # maybe it is better to set the batch_size to the 
         # size of the entire validation set.
-        return DataLoader(self.val, self.batch_size)
+        return DataLoader(
+            self.val, 
+            self.batch_size,
+            shuffle=True
+        )
 
     def test_dataloader(self):
-        return DataLoader(self.test, self.batch_size)
+        return DataLoader(
+            self.test, 
+            self.batch_size,
+            shuffle=True
+        )

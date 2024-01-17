@@ -30,23 +30,29 @@ class ActionQ(L.LightningModule):
     def training_step(self, batch, batch_idx):
         samples, targets = batch 
         results = self.forward(samples)
-        
-        loss = torch.nn.functional.mse_loss(results, targets)
-        self.log('train-loss-mse', loss)
+        mse_loss = torch.nn.functional.mse_loss(results, targets)
+        self.log_dict({
+            'train-loss-mse': mse_loss,
+            'train-loss-mae': torch.nn.functional.l1_loss(results, targets)
+        })
 
-        self.log('train-loss-mae',  torch.nn.functional.l1_loss(results, targets))
-        self.log('train-loss-rmae', torch.sqrt(torch.nn.functional.mse_loss(results, targets)))
-
-        return loss
+        return mse_loss
 
     def validation_step(self, batch, batch_idx):
         samples, targets = batch
         results = self.forward(samples)
+        self.log_dict({
+            'validation-loss-mae': torch.nn.functional.l1_loss(results, targets),
+            'validation-loss-mse': torch.nn.functional.mse_loss(results, targets)
+        })
 
-        self.log('validation-loss-mae',  torch.nn.functional.l1_loss(results, targets))
-        self.log('validation-loss-mse',  torch.nn.functional.mse_loss(results, targets))
-        self.log('validation-loss-rmse', torch.sqrt(torch.nn.functional.mse_loss(results, targets)))
-
+    def test_step(self, batch, batch_idx):
+        samples, targets = batch
+        results = self.forward(samples)
+        self.log_dict({
+            'test-loss-mae': torch.nn.functional.l1_loss(results, targets),
+            'test-loss-mse': torch.nn.functional.mse_loss(results, targets)
+        })
 
     def configure_optimizers(self):
         all_parameters = list(self.model.parameters())
@@ -69,8 +75,14 @@ class ActionQ(L.LightningModule):
             )
 
         # Create a lr scheduler
-        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=10, factor=0.2)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.epochs)
+        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        #    optimizer, 
+        #    mode='min', 
+        #    patience=20, 
+        #    factor=0.2,
+        #    verbose=True
+        #)
 
         # Print optimizer info
         #keys = sorted(set([k for hp in hps for k in hp.keys()]))
@@ -84,5 +96,5 @@ class ActionQ(L.LightningModule):
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
-            #'monitor': 'train-loss-mae'
+            'monitor': 'train-loss-mse'
         } 

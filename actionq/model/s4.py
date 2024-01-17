@@ -2017,7 +2017,7 @@ class AQS4Block(nn.Module):
         super().__init__()
 
         self.norm = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout1d()
+        #self.dropout = nn.Dropout1d()
         self.s4 = S4Block(
             d_model, **s4b_args
         )
@@ -2025,8 +2025,8 @@ class AQS4Block(nn.Module):
     def forward(self, x):
         res = x
         z, _ = self.s4(x)
-        x = self.dropout(z) + res
-        x = self.norm(x)
+        #x = self.dropout(z) + res
+        x = self.norm(z + res)
         return x
 
 
@@ -2042,8 +2042,9 @@ class AQS4(nn.Module):
     ):
         super().__init__()
 
-        # Dimension of the inner model
         self.d_model = joint_count * joint_expansion
+        self.joint_expansion = joint_expansion
+        self.joint_features = joint_features
         self.joint_count = joint_count
         self.d_output = d_output
         self.d_joint = joint_expansion
@@ -2053,31 +2054,36 @@ class AQS4(nn.Module):
         print(f'INFO: then resulting features are again mixed and combined in the {d_output} dims output.')
 
         # S4Blocks initialization
-        self.layers_temporal = nn.ModuleList()
+        temporal_layers = []
         for _ in range(layers_count):
-            self.layers_temporal.append(
+            temporal_layers.append(
                 AQS4Block(
                     self.d_model,
-                    mode='diag',        # TODO: Test different initialization modes.
+                    mode='s4d',         # TODO: Test different initialization modes.
                     dropout=dropout,
                     transposed=False,   # Accepted shape: (B, L, F)
                     lr=0.001,           # TODO: Test bigger learning rates.
                     n_ssm=None,
-                    final_act='relu'    # TODO: Test different activation functions.
+                    final_act='elu'     # TODO: Test different activation functions.
                 )
             )
+        
+        # TODO: Try different temporal model
+        self.temporal_model = nn.Sequential(*temporal_layers)
 
         # Project each joint features to a different space dimension
+        # TODO: Test different activation function.
         self.encoder = nn.Sequential(
             nn.Linear(joint_features, joint_expansion),
-            #nn.ReLU(),  # TODO: Test different activation function (GLU).
+            #nn.ELU(),
             #nn.Linear(joint_expansion, joint_expansion)
         )
 
         # At the end each joint features are concatenated and processed
+        # TODO: Test different activation function.
         self.decoder = nn.Sequential(
             #nn.Linear(self.d_model, self.d_model),
-            #nn.ReLU(),  # TODO: Test different activation function (GLU).
+            #nn.ELU(),
             nn.Linear(self.d_model, self.d_output)
         )
 
@@ -2091,15 +2097,15 @@ class AQS4(nn.Module):
         x = self.encoder(x)
 
         # Compact last dimensions (B, L, JK)
-        x = x.view(B, L, J * self.d_joint)
+        x = x.view(B, L, J * self.joint_expansion)
 
         # Process temporal sequence
-        for layer in self.layers_temporal:
-            x = layer(x)
+        x = self.temporal_model(x)
 
         # TODO: Decide how to treat the resulting output, pooling of all outputs?
         # Keep only the last? (Better for online inference I think)
-        x = x[:, -1, :]  # (B, JK)
+        # x = x[:, -1, :]
+        x = torch.mean(x, dim=1) # (B, JK) 
 
         # TODO: Propagate each joint features to neighbours
         # nodes = x.view(B, J, self.d_joint)
@@ -2107,80 +2113,3 @@ class AQS4(nn.Module):
 
         y = self.decoder(x)  # (B, d_output)
         return y
-
-
-# class S4Model(nn.Module):
-#
-#    def __init__(
-#        self,
-#        d_input,
-#        d_output,
-#        d_model,
-#        n_layers,
-#        n_ssm=None,
-#        dropout=0.2,
-#        prenorm=False,
-#    ):
-#        super().__init__()
-#
-#        self.prenorm = prenorm
-#
-#        # Linear encoder (d_input = 1 for grayscale and 3 for RGB)
-#        self.encoder = nn.Linear(d_input, d_model)
-#
-#        # Stack S4 layers as residual blocks
-#        self.s4_layers = nn.ModuleList()
-#        self.norms = nn.ModuleList()
-#        self.dropouts = nn.ModuleList()
-#        for _ in range(n_layers):
-#            self.s4_layers.append(
-#                S4Block(d_model, mode='diag', dropout=dropout, transposed=True, lr=0.001, n_ssm=n_ssm)
-#            )
-#            self.norms.append(nn.LayerNorm(d_model))
-#            self.dropouts.append(nn.Dropout1d())
-#
-#        # Linear decoder
-#        self.decoder = nn.Linear(d_model, d_output)
-#
-#    def forward(self, x):
-#        """
-#        Input x is shape (B, L, d_input)
-#        """
-#
-#        # Dont mix features here!
-#        # x = self.encoder(x)  # (B, L, d_input) -> (B, L, d_model)
-#
-#        x = x.transpose(-1, -2)  # (B, L, d_model) -> (B, d_model, L)
-#        for layer, norm, dropout in zip(self.s4_layers, self.norms, self.dropouts):
-#            # Each iteration of this loop will map (B, d_model, L) -> (B, d_model, L)
-#
-#            z = x
-#            if self.prenorm:
-#                # Prenorm
-#                z = norm(z.transpose(-1, -2)).transpose(-1, -2)
-#
-#            # Apply S4 block: we ignore the state input and output
-#            z, _ = layer(z)
-#
-#            # Dropout on the output of the S4 block
-#            z = dropout(z)
-#
-#            # Residual connection
-#            x = z + x
-#
-#            if not self.prenorm:
-#                # Postnorm
-#                x = norm(x.transpose(-1, -2)).transpose(-1, -2)
-#
-#        x = x.transpose(-1, -2)  # (B, d_model, L) -> (B, L, d_model)
-#
-#        # Pooling: average pooling over the sequence length
-#        # x = x.mean(dim=1)  # (B, L, d_model) -> (B, d_model)
-#
-#        # Keep only last output
-#        x = x[:, -1, :]
-#
-#        # Decode the outputs
-#        x = self.decoder(x)  # (B, d_model) -> (B, d_output)
-#
-#        return x
