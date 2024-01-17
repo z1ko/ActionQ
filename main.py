@@ -1,25 +1,25 @@
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import CometLogger, TensorBoardLogger
 import lightning as L
 from actionq.model.s4 import AQS4
 import matplotlib.pyplot as plt
 import torch.functional as F
-import torch
 from torch.utils.data import DataLoader
 from actionq.dataset.KiMoRe import KiMoReDataModule, KiMoReDataVisualizer, KiMoReDataset
 from einops import rearrange
+from actionq.model.regression import ActionQ
 
-
-#D = KiMoReDataset(exercise=1, window_size=400, rescale_samples=True)
+#D = KiMoReDataset(exercise=1, window_size=200, rescale_samples=True)
+#print(f'dataset size: {len(D)}')
 #
 #visualizer = KiMoReDataVisualizer()
 #for i, sample in enumerate(D):
 #    visualizer.visualize_2d(sample)
-#    if i > 10: break
+#    if i > 5: break
 #
 #exit(0)
 
 dataset = KiMoReDataModule(
-    batch_size=4,
+    batch_size=2,
     exercise=1,
     window_size=400
 )
@@ -37,87 +37,29 @@ train_dataloader = dataset.train_dataloader()
 val_dataloader = dataset.val_dataloader()
 test_dataloader = dataset.test_dataloader()
 
+hyperparameters = {
+    # How many layers of S4 are used to model the time sequence
+    'layers_count': 6,
+    # Expansion of each joint features
+    'joint_expansion': 32
+}
 
-class ActionQ(L.LightningModule):
-    def __init__(self, model, lr, weight_decay, epochs=-1):
-        super().__init__()
-        self.model = model
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.epochs = epochs
+# TODO: Move API key to env variable
+logger = CometLogger(
+    api_key='Zm5C4f6cFAA93SbzYWspFI8hg', 
+    save_dir='logs', 
+    project_name='AQS4',
+    experiment_name=f'{hyperparameters}'
+)
 
-    def forward(self, samples):  # (B, L, J, F)
-        #print(samples.shape)
-        return self.model(samples)
+model = AQS4(
+    joint_features=3, 
+    joint_count=19, 
+    joint_expansion=hyperparameters['joint_expansion'], 
+    layers_count=hyperparameters['layers_count'], 
+    d_output=3
+)
 
-    def training_step(self, batch, batch_idx):
-        samples, targets = batch 
-        results = self.forward(samples)
-        loss = torch.nn.functional.l1_loss(results, targets)
-        self.log('loss/l1/train', loss)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        samples, targets = batch
-        results = self.forward(samples)
-
-        mad_loss = torch.nn.functional.l1_loss(results, targets)
-        self.log('loss/l1/val', mad_loss)
-
-        rmse_loss = torch.sqrt(torch.nn.functional.mse_loss(results, targets))
-        self.log('loss/rmse/val', rmse_loss)
-
-    # def test_step(self, batch, batch_idx):
-    #    samples, targets = batch
-    #    results = self.model(samples)
-    #    results.squeeze_()
-    #
-    #    loss = torch.nn.functional.l1_loss(results, targets)
-    #    self.log('loss/l1/test', loss)
-
-    def configure_optimizers(self):
-        all_parameters = list(self.model.parameters())
-
-        # General parameters don't contain the special _optim key
-        params = [p for p in all_parameters if not hasattr(p, "_optim")]
-
-        # Create an optimizer with the general parameters
-        optimizer = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
-
-        # Add parameters with special hyperparameters
-        hps = [getattr(p, "_optim") for p in all_parameters if hasattr(p, "_optim")]
-        hps = [
-            dict(s) for s in sorted(list(dict.fromkeys(frozenset(hp.items()) for hp in hps)))
-        ]  # Unique dicts
-        for hp in hps:
-            params = [p for p in all_parameters if getattr(p, "_optim", None) == hp]
-            optimizer.add_param_group(
-                {"params": params, **hp}
-            )
-
-        # Create a lr scheduler
-        # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=patience, factor=0.2)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.epochs)
-
-        # Print optimizer info
-        keys = sorted(set([k for hp in hps for k in hp.keys()]))
-        for i, g in enumerate(optimizer.param_groups):
-            group_hps = {k: g.get(k, None) for k in keys}
-            print(' | '.join([
-                f"Optimizer group {i}",
-                f"{len(g['params'])} tensors",
-            ] + [f"{k} {v}" for k, v in group_hps.items()]))
-
-        return {
-            'optimizer': optimizer,
-            'lr_scheduler': scheduler
-        }
-
-
-logger = TensorBoardLogger('./logs')
-
-model = AQS4(joint_features=3, joint_count=19, joint_expansion=16, layers_count=2, d_output=3)
-model = ActionQ(model, 0.001, 0.01)
-
-trainer = L.Trainer(max_epochs=10, logger=logger, log_every_n_steps=5)
+model = ActionQ(model, lr=0.001, weight_decay=0.01)
+trainer = L.Trainer(max_epochs=50, logger=logger, log_every_n_steps=5)
 trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)

@@ -48,6 +48,22 @@ _features_count = len(_features)
 
 _skeleton_joint_count = len(_skeleton_joint_names)
 
+def rescale_sample(sample):
+    # TODO: This is hardcoded to 2 dimensions only
+    mean_x = torch.mean(sample[:, :, 0])
+    mean_y = torch.mean(sample[:, :, 1])
+
+    sample[:, :, 0] -= mean_x
+    sample[:, :, 1] -= mean_y
+
+    max_x = torch.max(sample)
+    min_x = torch.min(sample)
+    delta = max_x + min_x
+
+    #print(f"LOG: rescaling [{min_x}, {max_x}] -> [-1, 1]")
+    sample = (sample - min_x) / delta * 2.0 - 1.0
+
+
 class KiMoReDataset(torch.utils.data.Dataset):
     """
         KInematic Assessment of MOvement and Clinical Scores for
@@ -67,62 +83,51 @@ class KiMoReDataset(torch.utils.data.Dataset):
         # Load targets from processed dataset
         targets_path = 'data/processed/kimore_targets.parquet.gzip'
         df = pd.read_parquet(targets_path)
-        df = df[df['exercise'] == exercise]
+        self.targets_df = df[df['exercise'] == exercise]
         
         subject_target_map = {}
-        for subject, target in df.groupby('subject'):
+        for subject, target in self.targets_df.groupby('subject'):
             target = target[['TS', 'PO', 'CF']].to_numpy()
             subject_target_map[subject] = torch.tensor(target, dtype=torch.float32).squeeze()
 
         # Load samples from processed dataset
         samples_path = 'data/processed/kimore_samples.parquet.gzip'
         df = pd.read_parquet(samples_path)
-        df = df[df['exercise'] == exercise]
+        self.samples_df = df[df['exercise'] == exercise]
 
         # Transform dataframe to tensor samples
-        for name, subject in df.groupby('subject'):
+        for name, subject in self.samples_df.groupby('subject'):
+            target = subject_target_map[name]
+
             subject.set_index(['frame', 'joint'], inplace=True)
             subject = subject[_features]
-
+            
             # Use index to obtain tensor dimensionality
             frames_count = len(subject.index.get_level_values(0).unique())
             joints_count = len(subject.index.get_level_values(1).unique())
 
             # Skip samples that are too short
             if frames_count < window_size:
+                print(f'WARNING: sample too small: {name}')
                 continue
 
             try:
-                sample = torch.tensor(subject.to_numpy(), dtype=torch.float32)
-                sample = sample.reshape(frames_count, joints_count, _features_count)
-                sample = sample[:window_size, :, :] # TODO: Find a better way
-
-                target = subject_target_map[name]
-
-                if rescale_samples:
-                    self._rescale_sample(sample)
-
-                self.samples.append((sample, target))
+                sample_all = torch.tensor(subject.to_numpy(), dtype=torch.float32)
+                sample_all = sample_all.reshape(frames_count, joints_count, _features_count)
 
             except Exception as e:
+                # TODO: Understand the failure cases
                 print('WARNING: ', e)
+                continue
 
+            # Create a sample for each window
+            for frame_begin in range(0, frames_count - window_size, window_size):
+                print(f'LOG: creating sample [{frame_begin}-{frame_begin+window_size}]')
+                sample = sample_all[frame_begin:frame_begin+window_size, :, :]
+                if rescale_samples:
+                    rescale_sample(sample)
 
-    def _rescale_sample(self, sample):
-        # TODO: This is hardcoded to 2 dimensions only
-
-        mean_x = torch.mean(sample[:, :, 0])
-        mean_y = torch.mean(sample[:, :, 1])
-
-        sample[:, :, 0] -= mean_x
-        sample[:, :, 1] -= mean_y
-
-        max_x = torch.max(sample)
-        min_x = torch.min(sample)
-        delta = max_x + min_x
-
-        #print(f"LOG: rescaling [{min_x}, {max_x}] -> [-1, 1]")
-        sample = (sample - min_x) / delta * 2.0 - 1.0
+                self.samples.append((sample, target))
 
     def __len__(self):
         return len(self.samples)

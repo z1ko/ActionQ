@@ -17,8 +17,17 @@ ROOT_DIR = "data/raw/KiMoRe"
 
 # Joints of the body
 JOINTS_COUNT = 25
+
 # Joints that are not usefull (hands, facial, feet)
-EXCLUDED_JOINTS = [15, 20, 21, 22, 23, 24]
+# source: https://lisajamhoury.medium.com/understanding-kinect-v2-joints-and-coordinate-system-4f4b90b9df16
+EXCLUDED_JOINTS = [
+    15, # foot_left 
+    19, # foot_right
+    21, # handtip_left
+    22, # thumb_left
+    23, # handtip_right
+    24  # thumb_right
+]
 
 
 def _load_single_exercise(samples, data_descriptor, filepath):
