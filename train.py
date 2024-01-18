@@ -29,8 +29,9 @@ dataset = KiMoReDataModule(
     subjects=None,
     window_size=parameters['window_size'],
     features=['pos_x', 'pos_y'],
+    features_expansion=True
 )
-dataset.setup()
+dataset.setup(task='regression')
 
 train_dataloader = dataset.train_dataloader()
 val_dataloader = dataset.val_dataloader()

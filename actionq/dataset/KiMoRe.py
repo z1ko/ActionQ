@@ -57,6 +57,61 @@ def rescale_sample(sample):
     #print(f"LOG: rescaling [{min_x}, {max_x}] -> [-1, 1]")
     sample = (sample - min_x) / delta * 2.0 - 1.0
 
+class KiMoReDatasetClassification(torch.utils.data.Dataset):
+    def __init__(self, features, window_size, rescale_samples=True):
+        super().__init__()
+        self.samples = []
+
+        samples_path = 'data/processed/kimore_samples.parquet.gzip'
+        df = pd.read_parquet(samples_path)
+
+        # One-hot encoding of exercise
+        exercise_encoding = {
+            1: torch.tensor([1, 0, 0, 0, 0], dtype=torch.float32),
+            2: torch.tensor([0, 1, 0, 0, 0], dtype=torch.float32),
+            3: torch.tensor([0, 0, 1, 0, 0], dtype=torch.float32),
+            4: torch.tensor([0, 0, 0, 1, 0], dtype=torch.float32),
+            5: torch.tensor([0, 0, 0, 0, 1], dtype=torch.float32)
+        }
+
+        for exercise, exercise_data in df.groupby('exercise'):
+            for subject, subject_data in exercise_data.groupby('subject'):
+
+                subject_data.set_index(['frame', 'joint'], inplace=True)
+                subject_data = subject_data[features]
+
+                # Use index to obtain tensor dimensionality
+                frames_count = len(subject_data.index.get_level_values(0).unique())
+                joints_count = len(subject_data.index.get_level_values(1).unique())
+
+                # Skip samples that are too short
+                if frames_count < window_size:
+                    print(f'WARNING: sample too small: {subject}, frames: {frames_count}')
+                    continue
+
+                try:
+                    sample_complete = torch.tensor(subject_data.to_numpy(), dtype=torch.float32)
+                    sample_complete = sample_complete.reshape(frames_count, joints_count, len(features))
+
+                except Exception as e:
+                    # TODO: Understand the failure cases
+                    print(f'WARNING for subject: {subject}, frames: {frames_count}\n', e)
+                    continue
+
+                # Create a sample for each window
+                for frame_begin in range(0, frames_count - window_size, window_size):
+                    sample = sample_complete[frame_begin:frame_begin+window_size, :, :]
+                    if rescale_samples:
+                        rescale_sample(sample)
+
+                    self.samples.append((sample, exercise_encoding[exercise]))
+        
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        return self.samples[idx]
+
 
 class KiMoReDataset(torch.utils.data.Dataset):
     """
@@ -69,7 +124,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
         Each sample is of shape (frames, joints, features)
     """
 
-    def __init__(self, exercise, subjects, features, window_size, rescale_samples=True):
+    def __init__(self, exercise, subjects, features, window_size, features_expansion=False, rescale_samples=True):
         super().__init__()
 
         if exercise not in _exercise_range:
@@ -151,26 +206,21 @@ class KiMoReDataModule(L.LightningDataModule):
         Dataloader for the KiMoRe dataset
     """
 
-    def __init__(self, batch_size, exercise, features, subjects, window_size):
+    def __init__(self, batch_size, **dataset_args):
         super().__init__()
         self.batch_size = batch_size
-        self.exercise = exercise
-        self.subjects = subjects
-        self.features = features
-        self.window_size = window_size
+        self.dataset_args = dataset_args
 
-    def setup(self, _stage: str = ''):
-        self.total = KiMoReDataset(
-            exercise=self.exercise, 
-            subjects=self.subjects, 
-            features=self.features, 
-            window_size=self.window_size
-        )
+    def setup(self, task = 'classification'):
+        if task == 'classification':
+            self.dataset = KiMoReDatasetClassification(**self.dataset_args)
+        else:
+            self.dataset = KiMoReDataset(**self.dataset_args)
         
         self.train, self.val, self.test = torch.utils.data.random_split(
-            self.total, [0.8, 0.1, 0.1], torch.Generator())
+            self.dataset, [0.8, 0.1, 0.1], torch.Generator())
 
-        print(f'LOG: total samples count: {len(self.total)}')
+        print(f'LOG: total samples count: {len(self.dataset)}')
         print(f'LOG: train samples count: {len(self.train)}')
         print(f'LOG: val   samples count: {len(self.val)}')
         print(f'LOG: test  samples count: {len(self.test)}')
@@ -189,12 +239,10 @@ class KiMoReDataModule(L.LightningDataModule):
         return DataLoader(
             self.val, 
             self.batch_size,
-            shuffle=True
         )
 
     def test_dataloader(self):
         return DataLoader(
             self.test, 
             self.batch_size,
-            shuffle=True
         )
