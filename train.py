@@ -1,3 +1,5 @@
+
+import os
 import argparse
 import lightning as L
 from lightning.pytorch.loggers import CometLogger
@@ -14,21 +16,21 @@ args = parser.parse_args()
 # Experiment configuration
 parameters = {
     # Dimension of a batch
-    'batch_size': 16,
+    'batch_size': 8,
     # Number of frames for each sample
     'window_size': 250,
     # How many layers of S4 are used to model the time sequence
-    'layers_count': 4,
+    'layers_count': 8,
     # Expansion of each joint features
-    'joint_expansion': 4
+    'joint_expansion': 16
 }
 
 dataset = KiMoReDataModule(
     batch_size=parameters['batch_size'],
     exercise=1,
-    subjects=None,
+    subjects=['expert', 'non-expert', 'stroke'],
     window_size=parameters['window_size'],
-    features=['pos_x', 'pos_y'],
+    features=['pos_x', 'pos_y', 'pos_z'],
     features_expansion=True
 )
 dataset.setup(task='regression')
@@ -36,11 +38,6 @@ dataset.setup(task='regression')
 train_dataloader = dataset.train_dataloader()
 val_dataloader = dataset.val_dataloader()
 test_dataloader = dataset.test_dataloader()
-
-#logger = NeptuneLogger(
-#    api_key='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiIzYmJmOTJiMy01N2NmLTRmNGYtYTE5NC1iZjliODNjZjBlNTUifQ==',
-#    project='PARCO/ActionQ'
-#)
 
 # TODO: Move API key to env variable
 logger = CometLogger(
@@ -51,7 +48,7 @@ logger = CometLogger(
 )
 
 model = AQS4(
-    joint_features=2, 
+    joint_features=3, 
     joint_count=19, 
     joint_expansion=parameters['joint_expansion'], 
     layers_count=parameters['layers_count'], 

@@ -25,7 +25,7 @@ class ActionQ(L.LightningModule):
         self.epochs = epochs
 
     def forward(self, samples):  # (B, L, J, F)
-        return self.model(samples)
+        return self.model(samples) * 50.0 # Maximum score in the dataset
 
     def training_step(self, batch, batch_idx):
         samples, targets = batch 
