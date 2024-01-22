@@ -65,7 +65,7 @@ joints_count = len(sample.index.get_level_values(1).unique())
 
 sample = np.reshape(sample, (frames_count, joints_count, 3))
 sample = torch.tensor(sample) # (F, J, 3)
-rescale_sample(sample)
+#rescale_sample(sample)
 
 # ===================================================================================
 # Plot single subject, single exercise joint's features evolution
@@ -76,7 +76,7 @@ if args.mode == 'series':
         
         ax.plot(sample[:, joint, 0], label='pos_x') # pos_x
         ax.plot(sample[:, joint, 1], label='pos_y') # pos_y
-        #ax.plot(sample[:, joint, 2], label='pos_z') # pos_z
+        ax.plot(sample[:, joint, 2], label='pos_z') # pos_z
 
         ax.set_title(f'joint = {SKELETON_JOINT_NAMES[joint]}')
         ax.set_ylabel('value')
@@ -96,12 +96,12 @@ if args.mode == 'series':
     plt.show()
 
 if args.mode == 'animation':
-    
     fig, ax = plt.subplots()
-    ax.set_xlim(-1.0, 1.0)
-    ax.set_ylim(-1.0, 1.0)
-
+    
     xs, ys = sample[:, :, 0], sample[:, :, 1]
+    ax.set_xlim(torch.min(xs), torch.max(xs))
+    ax.set_ylim(torch.min(ys), torch.max(ys))
+
     graph, = ax.plot(xs[:, 0], ys[:, 0], linestyle="", marker="o")
 
     def update(frame):

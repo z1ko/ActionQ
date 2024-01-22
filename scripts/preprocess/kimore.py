@@ -1,7 +1,12 @@
 
+import argparse
 import copy
 import pandas as pd
 import os
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-n', '--normalize', default=False, action='store_true')
+args = parser.parse_args()
 
 # All available subjects in the dataset
 SUBJECT_TYPES = {
@@ -28,6 +33,9 @@ EXCLUDED_JOINTS = [
     23, # handtip_right
     24  # thumb_right
 ]
+
+# All interesting features
+FEATURES = ['pos_x', 'pos_y', 'pos_z']
 
 
 def _load_single_exercise(samples, data_descriptor, filepath):
@@ -59,7 +67,7 @@ def _load_evaluations(targets, data_descriptor, filepath):
     with open(filepath) as f:
         _, values = f.readline(), f.readline()
         tokens = values.split(',')
-        print(tokens)
+        #print(tokens)
         for exercise in range(5):
             # TODO: Maybe data is broken, check correct number of elements
 
@@ -73,6 +81,22 @@ def _load_evaluations(targets, data_descriptor, filepath):
             for key, value in targets.items():
                 targets[key].append(eval_descriptor[key])
 
+def _normalize_single_joints(df):
+    """ Normalize dataset by groups of (exercise, joint)
+    """
+    def normalize(df):
+        for feature in FEATURES:
+            mean = df[feature].mean()
+            quantile = df[feature].quantile([0.25, 0.75])
+            iqr = quantile[0.75] - quantile[0.25] 
+
+            #print(f'feature={feature}, mean={mean}, iqr={iqr}')
+            df[feature] = (df[feature] - mean) / iqr
+        return df
+
+    print('applying normalization to each joint')
+    result = df.groupby(['exercise', 'joint'], as_index=False).apply(normalize)
+    return result
 
 if __name__ == '__main__':
 
@@ -149,6 +173,12 @@ if __name__ == '__main__':
                             _load_single_exercise(samples, data_descriptor, file.path)
 
     data_df = pd.DataFrame.from_dict(samples)
+    print(data_df)
+
+    if args.normalize:
+        data_df = _normalize_single_joints(data_df)
+        print(data_df)
+
     data_df.to_parquet('data/processed/kimore_samples.parquet.gzip', compression='gzip')
     print(f'processed KiMoRe samples:\n{data_df}')
 
