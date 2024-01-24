@@ -2084,7 +2084,8 @@ class AQS4(nn.Module):
         self.decoder = nn.Sequential(
             #nn.Linear(self.d_model, self.d_model),
             #nn.ELU(),
-            nn.Linear(self.d_model, self.d_output)
+            nn.Linear(self.d_model, self.d_output),
+            nn.Sigmoid() # [0,1] range
         )
 
     def forward(self, x):

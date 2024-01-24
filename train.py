@@ -55,7 +55,7 @@ model = AQS4(
     d_output=1 # Clinical Total Score
 )
 
-model = ActionQ(model, lr=args.learning_rate, weight_decay=0.01)
+model = ActionQ(model, lr=args.learning_rate, maximum_score=50.0, weight_decay=0.001)
 trainer = L.Trainer(max_epochs=args.epochs, logger=logger)
 trainer.fit(model, 
     train_dataloaders=train_dataloader, 

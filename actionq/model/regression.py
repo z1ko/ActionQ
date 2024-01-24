@@ -17,26 +17,28 @@ class SequenceDecoder(nn.Module):
         pass
 
 class ActionQ(L.LightningModule):
-    def __init__(self, model, lr, weight_decay, epochs=-1):
+    def __init__(self, model, lr, weight_decay, maximum_score, epochs=-1):
         super().__init__()
         self.model = model
         self.lr = lr
+        self.maximum_score = maximum_score
         self.weight_decay = weight_decay
         self.epochs = epochs
 
     def forward(self, samples):  # (B, L, J, F)
-        return self.model(samples) * 50.0 # Maximum score in the dataset
+        return self.model(samples) * self.maximum_score # Maximum score in the dataset
 
     def training_step(self, batch, batch_idx):
         samples, targets = batch 
         results = self.forward(samples)
         mse_loss = torch.nn.functional.mse_loss(results, targets)
+        mae_loss = torch.nn.functional.l1_loss(results, targets)
         self.log_dict({
             'train-loss-mse': mse_loss,
-            'train-loss-mae': torch.nn.functional.l1_loss(results, targets)
+            'train-loss-mae': mae_loss
         })
 
-        return mse_loss
+        return mae_loss
 
     def validation_step(self, batch, batch_idx):
         samples, targets = batch
