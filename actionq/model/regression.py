@@ -25,35 +25,38 @@ class ActionQ(L.LightningModule):
         self.weight_decay = weight_decay
         self.epochs = epochs
 
+        self.save_hyperparameters(ignore=['model'])
+
     def forward(self, samples):  # (B, L, J, F)
         return self.model(samples) * self.maximum_score # Maximum score in the dataset
 
     def training_step(self, batch, batch_idx):
-        samples, targets = batch 
-        results = self.forward(samples)
-        mse_loss = torch.nn.functional.mse_loss(results, targets)
-        mae_loss = torch.nn.functional.l1_loss(results, targets)
-        self.log_dict({
-            'train-loss-mse': mse_loss,
-            'train-loss-mae': mae_loss
-        })
+        samples, y_target = batch 
+        y_model = self.forward(samples)
 
-        return mae_loss
+        # Tanto per...
+        #mse_loss = torch.nn.functional.mse_loss(results, targets)
+        #mae_loss = torch.nn.functional.l1_loss(results, targets)
+
+        criterion = nn.HuberLoss(reduction='mean', delta=1.0)
+        loss = criterion(y_model, y_target)
+        self.log("train/loss", loss)
+        return loss
 
     def validation_step(self, batch, batch_idx):
         samples, targets = batch
         results = self.forward(samples)
         self.log_dict({
-            'validation-loss-mae': torch.nn.functional.l1_loss(results, targets),
-            'validation-loss-mse': torch.nn.functional.mse_loss(results, targets)
+            'validation/loss-mae': torch.nn.functional.l1_loss(results, targets),
+            'validation/loss-mse': torch.nn.functional.mse_loss(results, targets)
         })
 
     def test_step(self, batch, batch_idx):
         samples, targets = batch
         results = self.forward(samples)
         self.log_dict({
-            'test-loss-mae': torch.nn.functional.l1_loss(results, targets),
-            'test-loss-mse': torch.nn.functional.mse_loss(results, targets)
+            'test/loss-mae': torch.nn.functional.l1_loss(results, targets),
+            'test/loss-mse': torch.nn.functional.mse_loss(results, targets)
         })
 
     def configure_optimizers(self):
@@ -99,4 +102,10 @@ class ActionQ(L.LightningModule):
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
             'monitor': 'train-loss-mse'
-        } 
+        }
+
+    @staticmethod
+    def add_model_specific_args(root_parser):
+        parser = root_parser.add_argument_group('AQS4')
+        parser.add_argument('--test')
+        return parser
