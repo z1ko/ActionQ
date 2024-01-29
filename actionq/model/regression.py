@@ -3,10 +3,12 @@ import torch.nn as nn
 import lightning as L
 
 # Module responsable to convert a sequence of states to a another representation
+
+
 class SequenceDecoder(nn.Module):
     def __init__(self, d_input, d_output, l_input, l_output, mode):
         super().__init__()
-        
+
         self.d_input = d_input
         self.d_output = d_output
         self.l_input = l_input
@@ -15,6 +17,7 @@ class SequenceDecoder(nn.Module):
         # TODO
 
         pass
+
 
 class ActionQ(L.LightningModule):
     def __init__(self, model, lr, weight_decay, maximum_score, epochs=-1):
@@ -28,15 +31,15 @@ class ActionQ(L.LightningModule):
         self.save_hyperparameters(ignore=['model'])
 
     def forward(self, samples):  # (B, L, J, F)
-        return self.model(samples) * self.maximum_score # Maximum score in the dataset
+        return self.model(samples) * self.maximum_score  # Maximum score in the dataset
 
     def training_step(self, batch, batch_idx):
-        samples, y_target = batch 
+        samples, y_target = batch
         y_model = self.forward(samples)
 
         # Tanto per...
-        #mse_loss = torch.nn.functional.mse_loss(results, targets)
-        #mae_loss = torch.nn.functional.l1_loss(results, targets)
+        # mse_loss = torch.nn.functional.mse_loss(results, targets)
+        # mae_loss = torch.nn.functional.l1_loss(results, targets)
 
         criterion = nn.HuberLoss(reduction='mean', delta=1.0)
         loss = criterion(y_model, y_target)
@@ -81,17 +84,17 @@ class ActionQ(L.LightningModule):
 
         # Create a lr scheduler
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.epochs)
-        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        #    optimizer, 
-        #    mode='min', 
-        #    patience=20, 
+        # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        #    optimizer,
+        #    mode='min',
+        #    patience=20,
         #    factor=0.2,
         #    verbose=True
-        #)
+        # )
 
         # Print optimizer info
-        #keys = sorted(set([k for hp in hps for k in hp.keys()]))
-        #for i, g in enumerate(optimizer.param_groups):
+        # keys = sorted(set([k for hp in hps for k in hp.keys()]))
+        # for i, g in enumerate(optimizer.param_groups):
         #    group_hps = {k: g.get(k, None) for k in keys}
         #    print(' | '.join([
         #        f"Optimizer group {i}",

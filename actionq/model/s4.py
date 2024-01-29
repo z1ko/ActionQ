@@ -2017,7 +2017,7 @@ class AQS4Block(nn.Module):
         super().__init__()
 
         self.norm = nn.LayerNorm(d_model)
-        #self.dropout = nn.Dropout1d()
+        # self.dropout = nn.Dropout1d()
         self.s4 = S4Block(
             d_model, **s4b_args
         )
@@ -2025,9 +2025,14 @@ class AQS4Block(nn.Module):
     def forward(self, x):
         res = x
         z, _ = self.s4(x)
-        #x = self.dropout(z) + res
+        # x = self.dropout(z) + res
         x = self.norm(z + res)
         return x
+
+
+class AQS4SpatialModule(nn.Module):
+    def __init__(self):
+        super().__init__()
 
 
 class AQS4(nn.Module):
@@ -2049,9 +2054,9 @@ class AQS4(nn.Module):
         self.d_output = d_output
         self.d_joint = joint_expansion
 
-        print(f'INFO: {joint_count} joints with {joint_features} features each are expanded to {joint_expansion}.')
-        print(f'INFO: inner model has size of {self.d_model} and it is processed with s4 blocks {layers_count} times.')
-        print(f'INFO: then resulting features are again mixed and combined in the {d_output} dims output.')
+        # print(f'{joint_count} joints with {joint_features} features each are expanded to {joint_expansion}.')
+        # print(f'inner model has size of {self.d_model} and it is processed with s4 blocks {layers_count} times.')
+        # print(f'then resulting features are again mixed and combined in the {d_output} dims output.')
 
         # S4Blocks initialization
         temporal_layers = []
@@ -2067,7 +2072,7 @@ class AQS4(nn.Module):
                     final_act='elu'     # TODO: Test different activation functions.
                 )
             )
-        
+
         # TODO: Try different temporal model
         self.temporal_model = nn.Sequential(*temporal_layers)
 
@@ -2075,17 +2080,17 @@ class AQS4(nn.Module):
         # TODO: Test different activation function.
         self.encoder = nn.Sequential(
             nn.Linear(joint_features, joint_expansion),
-            #nn.ELU(),
-            #nn.Linear(joint_expansion, joint_expansion)
+            # nn.ELU(),
+            # nn.Linear(joint_expansion, joint_expansion)
         )
 
         # At the end each joint features are concatenated and processed
         # TODO: Test different activation function.
         self.decoder = nn.Sequential(
-            #nn.Linear(self.d_model, self.d_model),
-            #nn.ELU(),
+            # nn.Linear(self.d_model, self.d_model),
+            # nn.ELU(),
             nn.Linear(self.d_model, self.d_output),
-            nn.Sigmoid() # [0,1] range
+            nn.Sigmoid()  # [0,1] range
         )
 
     def forward(self, x):
@@ -2106,7 +2111,7 @@ class AQS4(nn.Module):
         # TODO: Decide how to treat the resulting output, pooling of all outputs?
         # Keep only the last? (Better for online inference I think)
         # x = x[:, -1, :]
-        x = torch.mean(x, dim=1) # (B, JK) 
+        x = torch.mean(x, dim=1)  # (B, JK)
 
         # TODO: Propagate each joint features to neighbours
         # nodes = x.view(B, J, self.d_joint)

@@ -21,13 +21,13 @@ logger = WandbLogger(
 # Experiment configuration
 hparams = {
     # Dimension of a batch
-    'batch_size': 8,
+    'batch_size': 10,
     # Number of frames for each sample
-    'window_size': 100,
+    'window_size': 200,
     # How many layers of S4 are used to model the time sequence
-    'layers_count': 8,
+    'layers_count': 6,
     # Expansion of each joint features
-    'joint_expansion': 16
+    'joint_expansion': 3
 }
 logger.log_hyperparams(hparams)
 
@@ -46,19 +46,19 @@ val_dataloader = dataset.val_dataloader()
 test_dataloader = dataset.test_dataloader()
 
 model = AQS4(
-    joint_features=3, 
-    joint_count=19, 
-    joint_expansion=hparams['joint_expansion'], 
-    layers_count=hparams['layers_count'], 
-    d_output=1 # Clinical Total Score
+    joint_features=3,
+    joint_count=19,
+    joint_expansion=hparams['joint_expansion'],
+    layers_count=hparams['layers_count'],
+    d_output=1  # Clinical Total Score
 )
 
 model = ActionQ(model, lr=args.learning_rate, maximum_score=50.0, weight_decay=0.001)
 trainer = L.Trainer(max_epochs=args.epochs, logger=logger)
-trainer.fit(model, 
-    train_dataloaders=train_dataloader, 
-    val_dataloaders=val_dataloader,
-)
+trainer.fit(model,
+            train_dataloaders=train_dataloader,
+            val_dataloaders=val_dataloader,
+            )
 
 trainer.test(
     dataloaders=train_dataloader
