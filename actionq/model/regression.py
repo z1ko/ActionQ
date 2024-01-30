@@ -2,21 +2,10 @@ import torch
 import torch.nn as nn
 import lightning as L
 
-# Module responsable to convert a sequence of states to a another representation
-
-
-class SequenceDecoder(nn.Module):
-    def __init__(self, d_input, d_output, l_input, l_output, mode):
+class ActionQS4(L.LightningModule):
+    def __init__(self, lr, weight_decay):
         super().__init__()
 
-        self.d_input = d_input
-        self.d_output = d_output
-        self.l_input = l_input
-        self.l_output = l_output
-
-        # TODO
-
-        pass
 
 
 class ActionQ(L.LightningModule):
@@ -31,7 +20,8 @@ class ActionQ(L.LightningModule):
         self.save_hyperparameters(ignore=['model'])
 
     def forward(self, samples):  # (B, L, J, F)
-        return self.model(samples) * self.maximum_score  # Maximum score in the dataset
+        scores = self.model(samples)
+        return scores * self.maximum_score  # Maximum score in the dataset
 
     def training_step(self, batch, batch_idx):
         samples, y_target = batch
@@ -43,7 +33,7 @@ class ActionQ(L.LightningModule):
 
         criterion = nn.HuberLoss(reduction='mean', delta=1.0)
         loss = criterion(y_model, y_target)
-        self.log("train/loss", loss)
+        self.log("train/loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -52,7 +42,7 @@ class ActionQ(L.LightningModule):
         self.log_dict({
             'validation/loss-mae': torch.nn.functional.l1_loss(results, targets),
             'validation/loss-mse': torch.nn.functional.mse_loss(results, targets)
-        })
+        }, prog_bar=True)
 
     def test_step(self, batch, batch_idx):
         samples, targets = batch
@@ -60,7 +50,7 @@ class ActionQ(L.LightningModule):
         self.log_dict({
             'test/loss-mae': torch.nn.functional.l1_loss(results, targets),
             'test/loss-mse': torch.nn.functional.mse_loss(results, targets)
-        })
+        }, prog_bar=True)
 
     def configure_optimizers(self):
         all_parameters = list(self.model.parameters())

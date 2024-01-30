@@ -1925,6 +1925,7 @@ class S4Block(nn.Module):
         if final_act is None:
             self.output_linear = nn.Identity()
         else:
+            # NOTE: This ends up mixing all signals...
             self.output_linear = LinearActivation(
                 self.d_model * gate if gate is not None else self.layer.d_output,
                 self.d_model,
@@ -1932,6 +1933,7 @@ class S4Block(nn.Module):
                 activation=final_act,
                 activate=True,
             )
+            #self.output_linear = Activation(final_act)
 
     def forward(self, x, lengths=None, **kwargs):  # absorbs return_output and transformer src mask
         """
@@ -2080,15 +2082,15 @@ class AQS4(nn.Module):
         # TODO: Test different activation function.
         self.encoder = nn.Sequential(
             nn.Linear(joint_features, joint_expansion),
-            # nn.ELU(),
-            # nn.Linear(joint_expansion, joint_expansion)
+            nn.ELU(),
+            nn.Linear(joint_expansion, joint_expansion)
         )
 
         # At the end each joint features are concatenated and processed
         # TODO: Test different activation function.
         self.decoder = nn.Sequential(
-            # nn.Linear(self.d_model, self.d_model),
-            # nn.ELU(),
+            nn.Linear(self.d_model, self.d_model),
+            nn.ELU(),
             nn.Linear(self.d_model, self.d_output),
             nn.Sigmoid()  # [0,1] range
         )

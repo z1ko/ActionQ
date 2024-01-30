@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import lightning as L
 
+
 class ActionClassifier(L.LightningModule):
     def __init__(self, model, lr, weight_decay, epochs=-1):
         super().__init__()
@@ -11,34 +12,42 @@ class ActionClassifier(L.LightningModule):
         self.epochs = epochs
 
     def forward(self, samples):  # (B, L, J, F)
-        # apply softmax
-        results = self.model(samples) # (B, R)
-        logits = torch.nn.functional.softmax(results, dim=1)
-        return logits
+        logits = self.model(samples)  # (B, R)
+        results = torch.nn.functional.sigmoid(logits)
+        return results.squeeze()
 
     def training_step(self, batch, batch_idx):
-        samples, targets = batch 
-        logits = self.forward(samples)
+        samples, _, targets = batch
+        results = self.forward(samples)
 
-        criterion = nn.CrossEntropyLoss()
-        loss = criterion(logits, targets)
-        self.log('test-crossentropy', loss)
+        # print(f'results: {results}')
+        # print(f'targets: {targets}')
+
+        criterion = nn.BCELoss()
+        # criterion = nn.MSELoss()
+        loss = criterion(results, targets.float())
+        self.log('train/loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        samples, targets = batch
-        logits = self.forward(samples) # (B R)
+        samples, _, targets = batch
+        results = self.forward(samples)  # (B R)
 
-        _, max_scores_idx = torch.max(logits, dim=1) # (B 1)
-        batch_size = max_scores_idx.size(0)
+        # print(f'outputs: {results}')
+        # print(f'targets: {targets}')
 
-        classes = torch.zeros(batch_size, 5)
-        classes[:, max_scores_idx] = 1.0
+        criterion = nn.BCELoss()
+        loss = criterion(results, targets.float())
 
-        acc = (classes == targets).sum() / batch_size
-        self.log('validation-accuracy', acc)
+        prediction = (results > 0.5).long()
+        correct = (prediction == targets).sum()
+        size = prediction.size(0)
 
-    #def test_step(self, batch, batch_idx):
+        acc = float(correct) / float(size) * 100.0
+        self.log('val/accuracy', acc)
+        self.log('val/loss', loss)
+
+    # def test_step(self, batch, batch_idx):
     #    samples, targets = batch
     #    results = self.forward(samples)
     #    self.log_dict({
@@ -68,17 +77,17 @@ class ActionClassifier(L.LightningModule):
 
         # Create a lr scheduler
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.epochs)
-        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        #    optimizer, 
-        #    mode='min', 
-        #    patience=20, 
+        # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        #    optimizer,
+        #    mode='min',
+        #    patience=20,
         #    factor=0.2,
         #    verbose=True
-        #)
+        # )
 
         # Print optimizer info
-        #keys = sorted(set([k for hp in hps for k in hp.keys()]))
-        #for i, g in enumerate(optimizer.param_groups):
+        # keys = sorted(set([k for hp in hps for k in hp.keys()]))
+        # for i, g in enumerate(optimizer.param_groups):
         #    group_hps = {k: g.get(k, None) for k in keys}
         #    print(' | '.join([
         #        f"Optimizer group {i}",
@@ -89,4 +98,4 @@ class ActionClassifier(L.LightningModule):
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
             'monitor': 'test-crossentropy'
-        } 
+        }
