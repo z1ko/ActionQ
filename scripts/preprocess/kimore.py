@@ -81,22 +81,12 @@ def _load_evaluations(targets, data_descriptor, filepath):
             for key, value in targets.items():
                 targets[key].append(eval_descriptor[key])
 
-def _normalize_single_joints(df):
-    """ Normalize dataset by groups of (exercise, joint)
+def _normalize(df):
+    """ Normalize dataset using z-score
     """
-    def normalize(df):
-        for feature in FEATURES:
-            mean = df[feature].mean()
-            quantile = df[feature].quantile([0.25, 0.75])
-            iqr = quantile[0.75] - quantile[0.25] 
-
-            #print(f'feature={feature}, mean={mean}, iqr={iqr}')
-            df[feature] = (df[feature] - mean) / iqr
-        return df
-
-    print('applying normalization to each joint')
-    result = df.groupby(['exercise', 'joint'], as_index=False).apply(normalize)
-    return result
+    mean = exercise[FEATURES].mean()
+    std  = exercise[FEATURES].std()
+    df[FEATURES] = (df[FEATURES] - mean) / std
 
 if __name__ == '__main__':
 
@@ -176,7 +166,7 @@ if __name__ == '__main__':
     print(data_df)
 
     if args.normalize:
-        data_df = _normalize_single_joints(data_df)
+        _normalize(data_df)
         print(data_df)
 
     data_df.to_parquet('data/processed/kimore_samples.parquet.gzip', compression='gzip')

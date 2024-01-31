@@ -39,6 +39,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('-s', '--subject')
 parser.add_argument('-e', '--exercise')
+parser.add_argument('-n', '--normalize', action='store_true')
 parser.add_argument('-m', '--mode', 
                     choices=['series', 'animation'])
 
@@ -55,8 +56,14 @@ mpl.rcParams['figure.dpi'] = 100
 # Load data
 
 samples_df = pd.read_parquet('data/processed/kimore_samples.parquet.gzip')
-samples_df = samples_df.query(f"subject == '{args.subject}'").query(f"exercise == {args.exercise}")
 
+FEATURES=['pos_x', 'pos_y', 'pos_z']
+if args.normalize:
+    mean = samples_df[FEATURES].mean()
+    std  = samples_df[FEATURES].std()
+    samples_df[FEATURES] = (samples_df[FEATURES] - mean) / std
+
+samples_df = samples_df.query(f"subject == '{args.subject}'").query(f"exercise == {args.exercise}")
 sample = samples_df[['frame', 'joint', 'pos_x', 'pos_y', 'pos_z']]
 sample.set_index(['frame', 'joint'], inplace=True)
 
@@ -65,7 +72,6 @@ joints_count = len(sample.index.get_level_values(1).unique())
 
 sample = np.reshape(sample, (frames_count, joints_count, 3))
 sample = torch.tensor(sample) # (F, J, 3)
-#rescale_sample(sample)
 
 # ===================================================================================
 # Plot single subject, single exercise joint's features evolution
