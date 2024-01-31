@@ -4,6 +4,7 @@ import argparse
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 
+from actionq.rnn.lru import LRUModel
 from actionq.model.s4 import AQS4
 from actionq.dataset.KiMoRe import KiMoReDataModule
 from actionq.dataset.UIPRMD import UIPRMDDataModule
@@ -15,10 +16,6 @@ parser.add_argument('-e', '--epochs', default=100, type=int)
 parser.add_argument('-lr', '--learning_rate', default=0.001)
 args = parser.parse_args()
 
-logger = WandbLogger(
-    project='AQS4',
-    save_dir='logs/'
-)
 
 # Experiment configuration
 hparams = {
@@ -31,41 +28,59 @@ hparams = {
     # Frames skipped at the beginning
     'initial_frame_skip': 100,
     # How many layers of S4 are used to model the time sequence
-    'layers_count': 6,
+    'layers_count': 4,
     # Expansion of each joint features
-    'joint_expansion': 3
+    'joint_expansion': 3,
+    # Dropout for the entire model
+    'dropout': 0.25,
+    # Temporal aggregator
+    'temporal': 'LRU'
 }
+
+logger = WandbLogger(
+    project='AQS4',
+    save_dir='logs/'
+)
 logger.log_hyperparams(hparams)
 
 
 dataset = KiMoReDataModule(
-   batch_size=hparams['batch_size'],
-   exercise=1,
-   subjects=['expert', 'non-expert', 'stroke'],
-   window_size=hparams['window_size'],
-   features=['pos_x', 'pos_y', 'pos_z'],
-   features_expansion=True
+    batch_size=hparams['batch_size'],
+    exercise=1,
+    subjects=['expert', 'non-expert', 'stroke'],
+    window_size=hparams['window_size'],
+    features=['pos_x', 'pos_y', 'pos_z'],
+    features_expansion=True
 )
 
-#dataset = UIPRMDDataModule(
+# dataset = UIPRMDDataModule(
 #    batch_size=16,
 #    target_movement=1,
 #    window_size=hparams['window_size'],
 #    window_delta=hparams['window_delta'],
 #    initial_frame_skip=hparams['initial_frame_skip']
-#)
+# )
 dataset.setup(task='regression')
 
 train_dataloader = dataset.train_dataloader()
 val_dataloader = dataset.val_dataloader()
 test_dataloader = dataset.test_dataloader()
 
-model = AQS4(
+# model = AQS4(
+#    joint_features=3,
+#    joint_count=19,
+#    joint_expansion=hparams['joint_expansion'],
+#    layers_count=hparams['layers_count'],
+#    d_output=1  # Correct-incorrect probability
+# )
+
+model = LRUModel(
     joint_features=3,
     joint_count=19,
     joint_expansion=hparams['joint_expansion'],
     layers_count=hparams['layers_count'],
-    d_output=1  # Correct-incorrect probability
+    output_dim=1,
+    dropout=hparams['dropout']
 )
 
 model = ActionQ(model, lr=args.learning_rate, maximum_score=50.0, weight_decay=0.001, epochs=100)
