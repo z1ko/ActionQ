@@ -73,7 +73,7 @@ class ActionQ(L.LightningModule):
             )
 
         # Create a lr scheduler
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.epochs)
+        #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.epochs)
         # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         #    optimizer,
         #    mode='min',
@@ -93,7 +93,7 @@ class ActionQ(L.LightningModule):
 
         return {
             'optimizer': optimizer,
-            'lr_scheduler': scheduler,
+            #'lr_scheduler': scheduler,
             'monitor': 'train-loss-mse'
         }
 

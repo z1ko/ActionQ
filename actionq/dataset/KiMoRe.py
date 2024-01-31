@@ -276,8 +276,9 @@ class KiMoReDataModule(L.LightningDataModule):
         else:
             self.dataset = KiMoReDataset(**self.dataset_args)
 
-        self.train, self.val, self.test = torch.utils.data.random_split(
-            self.dataset, [0.8, 0.1, 0.1], torch.Generator())
+        # TODO: Implement k-fold cross validation
+        self.train, self.val = torch.utils.data.random_split(
+            self.dataset, [0.8, 0.2], torch.Generator())
 
         print(f'LOG: total samples count: {len(self.dataset)}')
         print(f'LOG: train samples count: {len(self.train)}')
