@@ -283,7 +283,7 @@ class KiMoReDataModule(L.LightningDataModule):
         print(f'LOG: total samples count: {len(self.dataset)}')
         print(f'LOG: train samples count: {len(self.train)}')
         print(f'LOG: val   samples count: {len(self.val)}')
-        print(f'LOG: test  samples count: {len(self.test)}')
+        #print(f'LOG: test  samples count: {len(self.test)}')
 
     def train_dataloader(self):
         return DataLoader(

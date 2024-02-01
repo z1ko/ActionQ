@@ -1,6 +1,8 @@
 
 import os
 import argparse
+import pprint
+
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 
@@ -12,43 +14,26 @@ from actionq.model.regression import ActionQ
 from actionq.model.classification import ActionClassifier
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-e', '--epochs', default=100, type=int)
+parser.add_argument('-ep', '--epochs', type=int, default=100)
 parser.add_argument('-lr', '--learning_rate', default=0.001)
+parser.add_argument('-bs', '--batch_size', default=10)
+parser.add_argument('-ws', '--window_size', default=200)
+parser.add_argument('-lc', '--layers_count', default=4)
+parser.add_argument('-je', '--joint_expansion', default=6)
+parser.add_argument('-do', '--dropout', default=0.25)
+parser.add_argument('-tm', '--temporal_model', choices=['LRU', 'S4'], default='LRU')
+
 args = parser.parse_args()
+pprint.PrettyPrinter(indent=4).pprint(vars(args))
 
-
-# Experiment configuration
-hparams = {
-    # Dimension of a batch
-    'batch_size': 10,
-    # Number of frames for each sample
-    'window_size': 200,
-    # Offset between each window of frames
-    'window_delta': 50,
-    # Frames skipped at the beginning
-    'initial_frame_skip': 100,
-    # How many layers of S4 are used to model the time sequence
-    'layers_count': 4,
-    # Expansion of each joint features
-    'joint_expansion': 3,
-    # Dropout for the entire model
-    'dropout': 0.25,
-    # Temporal aggregator
-    'temporal': 'LRU'
-}
-
-logger = WandbLogger(
-    project='AQS4',
-    save_dir='logs/'
-)
-logger.log_hyperparams(hparams)
-
+logger = WandbLogger(project='ActionQ', save_dir='logs/')
+logger.log_hyperparams(vars(args))
 
 dataset = KiMoReDataModule(
-    batch_size=hparams['batch_size'],
-    exercise=1,
-    subjects=['expert', 'non-expert', 'stroke'],
-    window_size=hparams['window_size'],
+    batch_size=args.batch_size,
+    exercise=4,
+    subjects=['expert', 'non-expert', 'stroke', 'backpain', 'parkinson'],
+    window_size=args.window_size,
     features=['pos_x', 'pos_y', 'pos_z'],
     features_expansion=True
 )
@@ -64,7 +49,7 @@ dataset.setup(task='regression')
 
 train_dataloader = dataset.train_dataloader()
 val_dataloader = dataset.val_dataloader()
-test_dataloader = dataset.test_dataloader()
+#test_dataloader = dataset.test_dataloader()
 
 # model = AQS4(
 #    joint_features=3,
@@ -77,10 +62,10 @@ test_dataloader = dataset.test_dataloader()
 model = LRUModel(
     joint_features=3,
     joint_count=19,
-    joint_expansion=hparams['joint_expansion'],
-    layers_count=hparams['layers_count'],
+    joint_expansion=args.joint_expansion,
+    layers_count=args.layers_count,
     output_dim=1,
-    dropout=hparams['dropout']
+    dropout=args.dropout
 )
 
 model = ActionQ(model, lr=args.learning_rate, maximum_score=50.0, weight_decay=0.001, epochs=100)
