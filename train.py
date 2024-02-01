@@ -7,20 +7,20 @@ import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 
 from actionq.rnn.lru import LRUModel
-from actionq.model.s4 import AQS4
 from actionq.dataset.KiMoRe import KiMoReDataModule
-from actionq.dataset.UIPRMD import UIPRMDDataModule
 from actionq.model.regression import ActionQ
-from actionq.model.classification import ActionClassifier
+#from actionq.model.s4 import AQS4
+#from actionq.dataset.UIPRMD import UIPRMDDataModule
+#from actionq.model.classification import ActionClassifier
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-ep', '--epochs', type=int, default=100)
-parser.add_argument('-lr', '--learning_rate', default=0.001)
-parser.add_argument('-bs', '--batch_size', default=10)
-parser.add_argument('-ws', '--window_size', default=200)
-parser.add_argument('-lc', '--layers_count', default=4)
-parser.add_argument('-je', '--joint_expansion', default=6)
-parser.add_argument('-do', '--dropout', default=0.25)
+parser.add_argument('-lr', '--learning_rate', type=float, default=0.001)
+parser.add_argument('-bs', '--batch_size', type=int, default=10)
+parser.add_argument('-ws', '--window_size', type=int, default=200)
+parser.add_argument('-lc', '--layers_count', type=int, default=4)
+parser.add_argument('-je', '--joint_expansion', type=int, default=6)
+parser.add_argument('-do', '--dropout', type=float, default=0.25)
 parser.add_argument('-tm', '--temporal_model', choices=['LRU', 'S4'], default='LRU')
 
 args = parser.parse_args()
@@ -31,7 +31,7 @@ logger.log_hyperparams(vars(args))
 
 dataset = KiMoReDataModule(
     batch_size=args.batch_size,
-    exercise=4,
+    exercise=1,
     subjects=['expert', 'non-expert', 'stroke', 'backpain', 'parkinson'],
     window_size=args.window_size,
     features=['pos_x', 'pos_y', 'pos_z'],
@@ -68,7 +68,7 @@ model = LRUModel(
     dropout=args.dropout
 )
 
-model = ActionQ(model, lr=args.learning_rate, maximum_score=50.0, weight_decay=0.001, epochs=100)
+model = ActionQ(model, lr=args.learning_rate, maximum_score=50.0, weight_decay=0.001, epochs=args.epochs // 5)
 trainer = L.Trainer(max_epochs=args.epochs, logger=logger)
 trainer.fit(
     model,
