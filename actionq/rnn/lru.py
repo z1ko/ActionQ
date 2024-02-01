@@ -5,6 +5,7 @@ Implementation of Linear Recurrent Unit (LRU) from:
 
 import torch
 import torch.nn as nn
+import einops as ein
 import math
 
 # NOTE: Should use custom kernels
@@ -84,56 +85,29 @@ class LRU(nn.Module):
         return (inner_states @ self.C.T).real
 
 
-class LRUAggregator(nn.Module):
-    """ Wrapper for an LRU. Adds skip connection, normalization,
-    feature projections and stacking.
+class LRULayer(nn.Module):
+    """ Wrapper for an LRU. Adds skip connection, normalization and stacking.
     """
 
     def __init__(
         self,
-        input_dim,
         state_dim,
-        output_dim,
-        layers_count,
         dropout,
-        aggregator='mean',
         **lru_args
     ):
         super().__init__()
 
-        self.encoder = nn.Linear(input_dim, state_dim)
-        self.decoder = nn.Linear(state_dim, output_dim)
-
         # NOTE: Uses typical Norm-RNN-Activation-Dropout layout
-        self.layers = nn.ModuleList()
-        for _ in range(layers_count):
-            self.layers.append(
-                nn.Sequential(
-                    nn.LayerNorm(state_dim),
-                    LRU(state_dim, **lru_args),
-                    nn.ELU(),  # Non-linearity,
-                    nn.Dropout(p=dropout)
-                )
-            )
+        self.layer = nn.Sequential(
+            nn.LayerNorm(state_dim),
+            LRU(state_dim, **lru_args),
+            nn.GELU(),  # Non-linearity,
+            nn.Dropout(p=dropout)
+        )
 
-        # How to aggregate temporal output (B, L, F) -> (B, F)
-        # TODO: Try different aggregators
-        if aggregator == 'mean':
-            self.agg = lambda x: torch.mean(x, 1)
-        else:
-            raise ValueError(f'Aggregator {aggregator} not valid for LRUBlock')
-
-    def forward(self, x):  # (B, L, F)
-
-        x = self.encoder(x)
-
-        for layer in self.layers:
-            residual = x
-            x = layer(x) + residual
-
-        x = self.agg(x)
-        y = self.decoder(x)
-
+    def forward(self, x):  
+        residual = x
+        y = self.layer(x) + residual # (B, L, F)
         return y
 
 
@@ -152,21 +126,29 @@ class LRUModel(nn.Module):
     ):
         super().__init__()
 
-        self.state_dim = joint_expansion * joint_count
-        self.encoder = nn.Linear(joint_features, joint_expansion)
-
-        # NOTE: for now use only one for all joint data
-        self.temporal = LRUAggregator(
-            input_dim=self.state_dim,
-            state_dim=self.state_dim,
-            output_dim=self.state_dim,
-            layers_count=layers_count,
-            dropout=dropout
+        self.initial_encoder = nn.Sequential(
+            nn.Linear(joint_features, joint_expansion)
         )
+
+        # NOTE: Use one aggregator for all joint time series
+        self.temporal_layers = nn.ModuleList()
+        for _ in range(layers_count):
+            self.temporal_layers.append(
+                LRULayer(
+                    state_dim=joint_expansion,
+                    dropout=dropout
+                )
+            )
+
+        # How to aggregate temporal output (B, L, F) -> (B, F)
+        # TODO: Try different aggregators
+        self.temporal_aggregator = lambda x: torch.mean(x, 1)
 
         # From joint data obtains exercise score
         self.regressor = nn.Sequential(
-            nn.Linear(self.state_dim, output_dim),
+            nn.Linear(joint_expansion * joint_count, joint_expansion * joint_count),
+            nn.GELU(),
+            nn.Linear(joint_expansion * joint_count, output_dim),
             nn.Sigmoid()
         )
 
@@ -176,14 +158,16 @@ class LRUModel(nn.Module):
 
         B, L, J, F = x.shape
 
-        # Change features dimensions (B, L, J, K)
-        x = self.encoder(x)
+        x = self.initial_encoder(x)
 
-        # Compact last dimensions (B, L, JK)
-        x = x.view(B, L, J * x.shape[-1])
+        # Process temporal sequence to (BJ, F)
+        x = ein.rearrange(x, 'B L J F -> (B J) L F')
+        for temporal_layer in self.temporal_layers:
+            x = temporal_layer(x)
 
-        # Process temporal sequence (B, JK)
-        x = self.temporal(x)
-
+        # Concat joint features
+        x = self.temporal_aggregator(x)
+        x = ein.rearrange(x, '(B J) K -> B (J K)', B=B, J=J)
         y = self.regressor(x)
+        
         return y
