@@ -91,9 +91,11 @@ class ActionQ(L.LightningModule):
         #        f"{len(g['params'])} tensors",
         #    ] + [f"{k} {v}" for k, v in group_hps.items()]))
 
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=400, gamma=0.1)
+        
         return {
             'optimizer': optimizer,
-            #'lr_scheduler': scheduler,
+            'lr_scheduler': scheduler,
             'monitor': 'train-loss-mse'
         }
 

@@ -88,7 +88,7 @@ _skeleton_connections = {
 }
 
 
-def adj_matrix():
+def skeleton_adj_matrix():
     joints_count = len(_skeleton_joint_names)
     result = torch.zeros((joints_count, joints_count))
     for joint_name, joint_connections in _skeleton_connections.items():
