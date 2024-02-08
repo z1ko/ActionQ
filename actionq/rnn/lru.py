@@ -11,6 +11,7 @@ import math
 # NOTE: Should use custom kernels
 from actionq.utils.accel import associative_scan, binary_operator_diag
 
+
 class LRU(nn.Module):
     """ Implementation of a Linear Recurrent Unit (LRU)
         https://arxiv.org/pdf/2303.06349.pdf
@@ -84,6 +85,29 @@ class LRU(nn.Module):
         inner_states = torch.vmap(inner_state_fn)(B_elems)
         return (inner_states @ self.C.T).real
 
+    def forward_step(self, x, states): # (J, F), (J, S) dove F = S
+
+        L_mod = torch.exp(-torch.exp(self.nu_log))
+        L_re = L_mod * torch.cos(torch.exp(self.theta_log))
+        L_im = L_mod * torch.sin(torch.exp(self.theta_log))
+        L_diag = torch.complex(L_re, L_im).to(self.B.device)
+
+        G_norm = torch.exp(self.gamma_log).unsqueeze(-1).to(self.B.device)
+        B_norm = self.B * G_norm
+
+        y = torch.zeros_like(x)
+        for i in range(x.shape[0]):
+            state = L_diag * self.state + B_norm @ x[i, :].to(dtype=self.B.dtype)
+            y[i, :] = (self.C @ state).real
+
+        return y, states
+
+
+_activations = {
+    'gelu': nn.GELU,
+    'relu': nn.ReLU,
+    'leakyrelu': nn.LeakyReLU
+}
 
 class LRULayer(nn.Module):
     """ Wrapper for an LRU. Adds skip connection, normalization and stacking.
@@ -93,15 +117,16 @@ class LRULayer(nn.Module):
         self,
         state_dim,
         dropout,
-        **lru_args
+        activation,
+        **kwargs
     ):
         super().__init__()
 
         # NOTE: Uses typical Norm-RNN-Activation-Dropout layout
         self.layer = nn.Sequential(
             nn.LayerNorm(state_dim),
-            LRU(state_dim, **lru_args),
-            nn.GELU(),  # Non-linearity,
+            LRU(state_dim, **kwargs),
+            _activations[activation](),  # Non-linearity,
             nn.Dropout(p=dropout)
         )
 

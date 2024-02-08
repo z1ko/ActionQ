@@ -18,13 +18,15 @@ class LRUModel(nn.Module):
         temporal_layers_count,
         spatial_layers_count,
         skeleton,
-        dropout
+        dropout,
+        **kwargs
     ):
         super().__init__()
 
 
         self.initial_encoder = nn.Sequential(
-            nn.Linear(joint_features, joint_expansion)
+            nn.Linear(joint_features, joint_expansion),
+            nn.LeakyReLU(),
         )
 
         # NOTE: Use one aggregator for all joint time series
@@ -33,41 +35,42 @@ class LRUModel(nn.Module):
             self.temporal_layers.append(
                 LRULayer(
                     state_dim=joint_expansion,
-                    dropout=dropout
+                    activation='gelu',
+                    dropout=dropout,
+                    **kwargs
                 )
             )
 
-        # How to aggregate temporal output (BJ, L, F) -> (BJ, F)
+        # How to aggregate temporal output (BJ, L, F) -> (BJ, F')
         # TODO: Try different aggregators
-        self.temporal_aggregator = lambda x: torch.mean(x, 1)
+        self.temporal_aggregator = lambda x: x[:, -1, :] #torch.mean(x, 1)
 
-        self.skeleton = skeleton.unsqueeze(0)[0].to(torch.device('cuda'))
-
-        self.spatial_layers = nn.ModuleList()
-        for i in range(spatial_layers_count):
-            self.spatial_layers.append(
-                GCNLayer(
-                    input_dim=joint_expansion if i == 0 else 128,
-                    output_dim=128,
-                    skeleton=self.skeleton,
-                    droput=dropout
-                )
-            )
+        #self.skeleton = skeleton.unsqueeze(0)[0].to(torch.device('cuda'))
+        #self.spatial_layers = nn.ModuleList()
+        #for i in range(spatial_layers_count):
+        #    self.spatial_layers.append(
+        #        GCNLayer(
+        #            input_dim=joint_expansion if i == 0 else 128,
+        #            output_dim=128,
+        #            skeleton=self.skeleton,
+        #            droput=dropout
+        #        )
+        #    )
 
         # From joint data obtains exercise score
+        #self.regressor = nn.Sequential(
+        #    nn.Linear(128, 128),
+        #    nn.GELU(),
+        #    nn.Linear(128, output_dim),
+        #    nn.Sigmoid()
+        #)
+
         self.regressor = nn.Sequential(
-            nn.Linear(128, 128),
-            nn.GELU(),
+            nn.Linear(joint_expansion * joint_count, 128),
+            nn.LeakyReLU(),
             nn.Linear(128, output_dim),
             nn.Sigmoid()
         )
-
-        #self.regressor = nn.Sequential(
-        #    nn.Linear(joint_expansion*joint_count, joint_expansion*joint_count),
-        #    nn.GELU(),
-        #    nn.Linear(joint_expansion*joint_count, output_dim),
-        #    nn.Sigmoid()
-        #)
 
     def forward(self, x):
         """ Input x shape: (B, L, J, F)
@@ -84,13 +87,13 @@ class LRUModel(nn.Module):
         x = self.temporal_aggregator(x)
 
         # Process spatial nodes (B, J, F) -> (B, J, F')
-        x = ein.rearrange(x, '(B J) F -> B J F', B=B, J=J)
-        for spatial_layer in self.spatial_layers:
-            x = spatial_layer(x)
+        #x = ein.rearrange(x, '(B J) F -> B J F', B=B, J=J)
+        #for spatial_layer in self.spatial_layers:
+        #    x = spatial_layer(x)
 
         # Concatenate all nodes representation
-        #x = ein.rearrange(x, 'B J F -> B (J F)')
-        x = torch.sum(x, dim = 1)
+        x = ein.rearrange(x, '(B J) F -> B (J F)', B=B, J=J)
+        #x = torch.mean(x, dim = 1)
         y = self.regressor(x)
 
         return y
