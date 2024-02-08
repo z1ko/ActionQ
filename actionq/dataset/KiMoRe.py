@@ -116,61 +116,60 @@ def rescale_sample(sample):
     sample = (sample - min_x) / delta * 2.0 - 1.0
 
 
-class KiMoReDatasetClassification(torch.utils.data.Dataset):
-    def __init__(self, features, window_size, rescale_samples=True):
-        super().__init__()
-        self.samples = []
-
-        samples_path = 'data/processed/kimore_samples.parquet.gzip'
-        df = pd.read_parquet(samples_path)
-
-        # One-hot encoding of exercise
-        exercise_encoding = {
-            1: torch.tensor([1, 0, 0, 0, 0], dtype=torch.float32),
-            2: torch.tensor([0, 1, 0, 0, 0], dtype=torch.float32),
-            3: torch.tensor([0, 0, 1, 0, 0], dtype=torch.float32),
-            4: torch.tensor([0, 0, 0, 1, 0], dtype=torch.float32),
-            5: torch.tensor([0, 0, 0, 0, 1], dtype=torch.float32)
-        }
-
-        for exercise, exercise_data in df.groupby('exercise'):
-            for subject, subject_data in exercise_data.groupby('subject'):
-
-                subject_data.set_index(['frame', 'joint'], inplace=True)
-                subject_data = subject_data[features]
-
-                # Use index to obtain tensor dimensionality
-                frames_count = len(subject_data.index.get_level_values(0).unique())
-                joints_count = len(subject_data.index.get_level_values(1).unique())
-
-                # Skip samples that are too short
-                if frames_count < window_size:
-                    print(f'WARNING: sample too small: {subject}, frames: {frames_count}')
-                    continue
-
-                try:
-                    sample_complete = torch.tensor(subject_data.to_numpy(), dtype=torch.float32)
-                    sample_complete = sample_complete.reshape(frames_count, joints_count, len(features))
-
-                except Exception as e:
-                    # TODO: Understand the failure cases
-                    print(f'WARNING for subject: {subject}, frames: {frames_count}\n', e)
-                    continue
-
-                # Create a sample for each window
-                for frame_begin in range(0, frames_count - window_size, window_size):
-                    sample = sample_complete[frame_begin:frame_begin + window_size, :, :]
-                    if rescale_samples:
-                        rescale_sample(sample)
-
-                    self.samples.append((sample, exercise_encoding[exercise]))
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        return self.samples[idx]
-
+#class KiMoReDatasetClassification(torch.utils.data.Dataset):
+#    def __init__(self, features, window_size, rescale_samples=True):
+#        super().__init__()
+#        self.samples = []
+#
+#        samples_path = 'data/processed/kimore_samples.parquet.gzip'
+#        df = pd.read_parquet(samples_path)
+#
+#        # One-hot encoding of exercise
+#        exercise_encoding = {
+#            1: torch.tensor([1, 0, 0, 0, 0], dtype=torch.float32),
+#            2: torch.tensor([0, 1, 0, 0, 0], dtype=torch.float32),
+#            3: torch.tensor([0, 0, 1, 0, 0], dtype=torch.float32),
+#            4: torch.tensor([0, 0, 0, 1, 0], dtype=torch.float32),
+#            5: torch.tensor([0, 0, 0, 0, 1], dtype=torch.float32)
+#        }
+#
+#        for exercise, exercise_data in df.groupby('exercise'):
+#            for subject, subject_data in exercise_data.groupby('subject'):
+#
+#                subject_data.set_index(['frame', 'joint'], inplace=True)
+#                subject_data = subject_data[features]
+#
+#                # Use index to obtain tensor dimensionality
+#                frames_count = len(subject_data.index.get_level_values(0).unique())
+#                joints_count = len(subject_data.index.get_level_values(1).unique())
+#
+#                # Skip samples that are too short
+#                if frames_count < window_size:
+#                    print(f'WARNING: sample too small: {subject}, frames: {frames_count}')
+#                    continue
+#
+#                try:
+#                    sample_complete = torch.tensor(subject_data.to_numpy(), dtype=torch.float32)
+#                    sample_complete = sample_complete.reshape(frames_count, joints_count, len(features))
+#
+#                except Exception as e:
+#                    # TODO: Understand the failure cases
+#                    print(f'WARNING for subject: {subject}, frames: {frames_count}\n', e)
+#                    continue
+#
+#                # Create a sample for each window
+#                for frame_begin in range(0, frames_count - window_size, window_size):
+#                    sample = sample_complete[frame_begin:frame_begin + window_size, :, :]
+#                    if rescale_samples:
+#                        rescale_sample(sample)
+#
+#                    self.samples.append((sample, exercise_encoding[exercise]))
+#
+#    def __len__(self):
+#        return len(self.samples)
+#
+#    def __getitem__(self, idx):
+#        return self.samples[idx]
 
 class KiMoReDataset(torch.utils.data.Dataset):
     """
@@ -183,7 +182,16 @@ class KiMoReDataset(torch.utils.data.Dataset):
         Each sample is of shape (frames, joints, features)
     """
 
-    def __init__(self, exercise, subjects, features, window_size, features_expansion=False, rescale_samples=True):
+    def __init__(
+        self, 
+        exercise, 
+        subjects, 
+        features, 
+        window_size,
+        window_delta,
+        features_expansion, 
+        normalize
+    ):
         super().__init__()
 
         if exercise not in _exercise_range:
@@ -245,13 +253,27 @@ class KiMoReDataset(torch.utils.data.Dataset):
                 continue
 
             # Create a sample for each window
-            for frame_begin in range(0, frames_count - window_size, window_size):
+            for frame_begin in range(0, frames_count - window_size, window_delta):
                 # print(f'LOG: creating sample [{frame_begin}-{frame_begin+window_size}]')
-                sample = sample_all[frame_begin:frame_begin + window_size, :, :]
-                if rescale_samples:
-                    rescale_sample(sample)
-
+                sample = sample_all[frame_begin:frame_begin + window_delta, :, :]
                 self.samples.append((sample, target))
+
+        if features_expansion:
+            self.samples = self.feature_augmentation(self.samples)
+
+            
+    def feature_augmentation(self, samples):
+        results = []
+        for movement, target in samples:
+            L, J, F = movement.shape
+            augmented = torch.zeros((L-1, J, F + 3))
+            augmented[:, :, :3] = movement[:-1, ...]
+
+            for frame in range(L-1):
+                augmented[frame, :, 3:6] = movement[frame+1, :, :] - movement[frame, :, :] # first difference
+
+            results.append((augmented, target))
+        return results
 
     def __len__(self):
         return len(self.samples)

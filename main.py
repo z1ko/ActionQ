@@ -2,7 +2,7 @@ import argparse
 import lightning as L
 from lightning.pytorch.loggers import CometLogger
 
-from actionq.model.s4 import AQS4
+from actionq.rnn.s4 import AQS4
 from actionq.dataset.KiMoRe import KiMoReDataModule, adj_matrix
 from actionq.model.classification import ActionClassifier
 

@@ -2,12 +2,6 @@ import torch
 import torch.nn as nn
 import lightning as L
 
-class ActionQS4(L.LightningModule):
-    def __init__(self, lr, weight_decay):
-        super().__init__()
-
-
-
 class ActionQ(L.LightningModule):
     def __init__(self, model, lr, weight_decay, maximum_score, epochs=-1):
         super().__init__()
@@ -31,7 +25,7 @@ class ActionQ(L.LightningModule):
         # mse_loss = torch.nn.functional.mse_loss(results, targets)
         # mae_loss = torch.nn.functional.l1_loss(results, targets)
 
-        criterion = nn.HuberLoss(reduction='mean', delta=1.0)
+        criterion = nn.HuberLoss(reduction='mean', delta=1.35)
         loss = criterion(y_model, y_target)
         self.log("train/loss", loss, prog_bar=True)
         return loss

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 # TODO: Use simpler S4 block
-from actionq.model.s4 import AQS4Block
+from actionq.rnn.s4 import AQS4Block
 
 class SingleJointTemporalBlock(nn.Module):
     def __init__(
