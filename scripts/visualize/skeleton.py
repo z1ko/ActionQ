@@ -8,6 +8,7 @@ import pickle
 parser = argparse.ArgumentParser()
 parser.add_argument('input', type=str)
 parser.add_argument('--normalize', default=False, action='store_true')
+parser.add_argument('--joint', type=int, default=15)
 
 args = parser.parse_args()
 pprint.pprint(vars(args))
@@ -35,7 +36,7 @@ if args.normalize:
 
     skeleton = ein.rearrange(skeleton, 'L (J F) -> L J F', L=L, J=J)
 
-plt.plot(skeleton[:, 4, :])
+plt.plot(skeleton[:, args.joint, :])
 plt.legend(['pos_x', 'pos_y', 'vel_x', 'vel_y'])
 plt.show()
 

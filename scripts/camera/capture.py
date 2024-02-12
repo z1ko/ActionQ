@@ -7,6 +7,10 @@ import os
 import mediapipe
 import numpy as np
 import pickle
+import random
+import string
+
+VERSION = '0.1.2'
 
 # For the homemade training dataset we use only the upper body joints
 UPPER_BODY_JOINT = frozenset([11,12,13,14,15,16])
@@ -21,6 +25,7 @@ parser.add_argument('--width', type=int, default=640)
 parser.add_argument('--height', type=int, default=480)
 parser.add_argument('--repetition_delay', type=int, default=5)
 parser.add_argument('--pose_estimator', type=bool, default=True)
+parser.add_argument('--draw_skeleton', default=False, action='store_true')
 
 args = parser.parse_args()
 pprint.pprint(vars(args))
@@ -41,6 +46,11 @@ fourcc = cv2.VideoWriter_fourcc('M','J','P','G')
 
 if args.pose_estimator:
     poser = mediapipe.solutions.pose.Pose()
+
+# Unique id for this session
+id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+folder = os.path.join(args.save_dir, VERSION, id)
+os.makedirs(folder)
 
 exit_requested = False
 for rep in range(args.repetitions):
@@ -64,12 +74,13 @@ for rep in range(args.repetitions):
         #print(f'repetition-{rep}-frame-{frame_idx}')
         frame = cv2.flip(frame, 1)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        frames.append(frame.copy())
 
         # Extract skeleton
         if args.pose_estimator:
 
             # We save only the upper body joints and their 2D position on the screen
-            skeleton = np.zeros((len(UPPER_BODY_JOINT), 2))
+            skeleton = np.zeros((33, 2))
 
             frame.flags.writeable = False
             results = poser.process(frame)
@@ -80,11 +91,11 @@ for rep in range(args.repetitions):
                 # Draw and save joints
                 skeleton_id = 0
                 for landmark_id, landmark in enumerate(results.pose_landmarks.landmark):
-                    if landmark_id in UPPER_BODY_JOINT:
-                        cx, cy = landmark.x, landmark.y
-                        skeleton[skeleton_id] = np.array([cx, cy])
-                        skeleton_id += 1
-
+                    cx, cy = landmark.x, landmark.y
+                    skeleton[skeleton_id] = np.array([cx, cy])
+                    skeleton_id += 1 # Save all skeleton joints
+                    
+                    if args.draw_skeleton:
                         cv2.circle(
                             frame, 
                             (int(landmark.x * args.width), int(landmark.y * args.height)), 
@@ -94,26 +105,27 @@ for rep in range(args.repetitions):
                         )
 
                 # Draw skeleton
-                mediapipe.solutions.drawing_utils.draw_landmarks(
-                    frame, 
-                    results.pose_landmarks, 
-                    #mediapipe.solutions.pose.POSE_CONNECTIONS
-                    UPPER_BODY_CONNECTIONS
-                )
+                if args.draw_skeleton:
+                    mediapipe.solutions.drawing_utils.draw_landmarks(
+                        frame,
+                        results.pose_landmarks,
+                        mediapipe.solutions.pose.POSE_CONNECTIONS
+                    )
 
             skeleton_frames.append(skeleton)
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         cv2.imshow('video', frame)
-        frames.append(frame)
         frame_idx += 1
 
         if cv2.waitKey(1000//int(fps)) & 0xFF == ord('q'):
             exit_requested = True 
             break
+   
+
+    filename = os.path.join(folder, f'repetition-{rep}-len-{args.lenght}')
 
     # write all frames
-    filename = os.path.join(args.save_dir, f'repetition-{rep}')
     framerate = len(frames) / args.lenght # framerate effettivo
     print(f'saving repetition to {filename}, frames={len(frames)}, framerate={framerate}')
     writer = cv2.VideoWriter(f'{filename}.avi', fourcc, framerate, (args.width, args.height))
