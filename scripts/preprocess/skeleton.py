@@ -7,7 +7,7 @@ import os
 
 UPPER_BODY_JOINTS='11,12,13,14,15,16'
 UPPER_BODY_JOINTS_ROOTS='11,12'
-AUGMENTATIONS='difference'
+AUGMENTATIONS='angle,difference'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('input_folder', type=str),
@@ -34,9 +34,18 @@ def aug_difference(samples):
     
     return result
 
+def aug_angle(samples):
+    S, L, J, F = samples.shape
+    result = np.zeros((S, L, J, F + 1))
+    result[:, :, :, :F] = samples
+    ratios = np.expand_dims(samples[..., 0] / samples[..., 1], axis=-1)
+    result[:, :, :, F:] = np.arctan(ratios)
+    return result
+
 # Supported augmentations
 aug_fn = {
-    'difference': aug_difference
+    'difference': aug_difference,
+    'angle': aug_angle
 }
 
 def plot_all_joints_of_sample(samples, sample_idx):
@@ -93,8 +102,7 @@ if args.augmentations is not None:
     for aug in args.augmentations.split(','):
         print(f'Augmenting feature: {aug}')
         samples = aug_fn[aug](samples)
-
-    plot_sample(samples, 0)
+        plot_sample(samples, 0)
 
 # Make all body joints position relative to root ones if requested
 if args.make_relative_to_roots and args.joint_roots is not None:
