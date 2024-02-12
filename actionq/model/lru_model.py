@@ -17,14 +17,14 @@ class LRUModel(nn.Module):
         output_dim,
         temporal_layers_count,
         spatial_layers_count,
-        skeleton,
         dropout,
+        skeleton=None,
         **kwargs
     ):
         super().__init__()
 
 
-        self.initial_encoder = nn.Sequential(
+        self.initial = nn.Sequential(
             nn.Linear(joint_features, joint_expansion),
             nn.LeakyReLU(),
         )
@@ -65,7 +65,7 @@ class LRUModel(nn.Module):
         #    nn.Sigmoid()
         #)
 
-        self.regressor = nn.Sequential(
+        self.final = nn.Sequential(
             nn.Linear(joint_expansion * joint_count, 128),
             nn.LeakyReLU(),
             nn.Linear(128, output_dim),
@@ -78,7 +78,7 @@ class LRUModel(nn.Module):
 
         B, L, J, F = x.shape
 
-        x = self.initial_encoder(x)
+        x = self.initial(x)
 
         # Process temporal sequence to (BJ, F)
         x = ein.rearrange(x, 'B L J F -> (B J) L F')
@@ -94,6 +94,6 @@ class LRUModel(nn.Module):
         # Concatenate all nodes representation
         x = ein.rearrange(x, '(B J) F -> B (J F)', B=B, J=J)
         #x = torch.mean(x, dim = 1)
-        y = self.regressor(x)
+        y = self.final(x)
 
         return y

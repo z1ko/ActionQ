@@ -1,6 +1,10 @@
+from typing import Any
 import torch
 import torch.nn as nn
 import lightning as L
+
+from actionq.loss.rank_n_contrast import RnCLoss
+from actionq.model.lru_model import LRUModel
 
 class ActionQ(L.LightningModule):
     def __init__(self, model, lr, weight_decay, maximum_score, epochs=-1):
@@ -98,3 +102,65 @@ class ActionQ(L.LightningModule):
         parser = root_parser.add_argument_group('AQS4')
         parser.add_argument('--test')
         return parser
+
+class ActionQualityModule(L.LightningModule):
+    def __init__(self, lr, weight_decay, scheduler_step) -> None:
+        super().__init__()
+        self.weight_decay = weight_decay
+        self.scheduler_step = scheduler_step
+        self.lr = lr
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(lr=self.lr, weight_decay=self.weight_decay)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=self.scheduler_step, gamma=0.1)
+        return { 'optimizer': optimizer, 'lr_scheduler': scheduler }
+
+class AQEncoder(ActionQualityModule):
+    def __init__(self, embedding_dim, options, **kwargs) -> None:
+        super().__init__(**kwargs)
+        
+        self.criterion = RnCLoss(temperature=2, label_diff='l1', feature_sim='l2')
+        self.model = LRUModel(
+            joint_features=options.joint_features,
+            joint_count=options.joint_count,
+            joint_expansion=options.joint_expansion,
+            temporal_layers_count=options.temporal_layers_count,
+            spatial_layers_count=options.spatial_layers_count,
+            output_dim=1,
+            #skeleton=skeleton_adj_matrix(),
+            dropout=options.dropout,
+            r_min=options.lru_min_radius,
+            r_max=options.lru_max_radius
+        )
+
+        self.save_hyperparameters()
+
+    @staticmethod
+    def add_model_specific_args(root_parser):
+        parser = root_parser.add_argument_group('Encoder')
+        parser.add_argument('--embedding_dim', type=int, default=128)
+        return parser
+
+    def training_step(self, batch, batch_idx):
+        samples, targets = batch
+        outputs = self.model(samples)
+        return self.criterion(outputs, targets)
+
+
+class AQRegressor(ActionQualityModule):
+    def __init__(self, embedding_dim) -> None:
+        super().__init__()
+        
+        self.criterion = nn.HuberLoss(delta=1.35)
+        self.model = nn.Sequential(
+            nn.Linear(embedding_dim, 128),
+            nn.LeakyReLU(),
+            nn.Linear(128, 1),
+            nn.Sigmoid()
+        )
+
+
+    def training_step(self, batch, batch_idx):
+        samples, targets = batch
+        outputs = self.model(samples)
+        return self.criterion(outputs, targets)
