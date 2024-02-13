@@ -66,8 +66,8 @@ val_dataloader = dataset.val_dataloader()
 # )
 
 model = LRUModel(
-    joint_features=6,
-    joint_count=19,
+    joint_features=args.joint_features,
+    joint_count=args.joint_count,
     joint_expansion=args.joint_expansion,
     temporal_layers_count=args.temporal_layers_count,
     spatial_layers_count=args.spatial_layers_count,
@@ -101,7 +101,3 @@ trainer.fit(
     train_dataloaders=train_dataloader,
     val_dataloaders=val_dataloader
 )
-
-# trainer.test(
-#    dataloaders=train_dataloader
-# )

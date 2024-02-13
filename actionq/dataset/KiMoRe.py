@@ -116,7 +116,7 @@ def rescale_sample(sample):
     sample = (sample - min_x) / delta * 2.0 - 1.0
 
 
-#class KiMoReDatasetClassification(torch.utils.data.Dataset):
+# class KiMoReDatasetClassification(torch.utils.data.Dataset):
 #    def __init__(self, features, window_size, rescale_samples=True):
 #        super().__init__()
 #        self.samples = []
@@ -183,13 +183,13 @@ class KiMoReDataset(torch.utils.data.Dataset):
     """
 
     def __init__(
-        self, 
-        exercise, 
-        subjects, 
-        features, 
+        self,
+        exercise,
+        subjects,
+        features,
         window_size,
         window_delta,
-        features_expansion, 
+        features_expansion,
         normalize
     ):
         super().__init__()
@@ -261,16 +261,15 @@ class KiMoReDataset(torch.utils.data.Dataset):
         if features_expansion:
             self.samples = self.feature_augmentation(self.samples)
 
-            
     def feature_augmentation(self, samples):
         results = []
         for movement, target in samples:
             L, J, F = movement.shape
-            augmented = torch.zeros((L-1, J, F + 3))
+            augmented = torch.zeros((L - 1, J, F + 3))
             augmented[:, :, :3] = movement[:-1, ...]
 
-            for frame in range(L-1):
-                augmented[frame, :, 3:6] = movement[frame+1, :, :] - movement[frame, :, :] # first difference
+            for frame in range(L - 1):
+                augmented[frame, :, 3:6] = movement[frame + 1, :, :] - movement[frame, :, :]  # first difference
 
             results.append((augmented, target))
         return results
@@ -294,18 +293,18 @@ class KiMoReDataModule(L.LightningDataModule):
 
     def setup(self, task='classification'):
         if task == 'classification':
-            self.dataset = KiMoReDatasetClassification(**self.dataset_args)
+            self.dataset = None  # KiMoReDatasetClassification(**self.dataset_args)
         else:
             self.dataset = KiMoReDataset(**self.dataset_args)
 
         # TODO: Implement k-fold cross validation
-        self.train, self.val = torch.utils.data.random_split(
-            self.dataset, [0.8, 0.2], torch.Generator())
+        self.train, self.val, self.test = torch.utils.data.random_split(
+            self.dataset, [0.8, 0.2, 0.0], torch.Generator())
 
         print(f'LOG: total samples count: {len(self.dataset)}')
         print(f'LOG: train samples count: {len(self.train)}')
         print(f'LOG: val   samples count: {len(self.val)}')
-        #print(f'LOG: test  samples count: {len(self.test)}')
+        # print(f'LOG: test  samples count: {len(self.test)}')
 
     def train_dataloader(self):
         return DataLoader(
