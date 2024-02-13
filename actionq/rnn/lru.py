@@ -134,3 +134,20 @@ class LRULayer(nn.Module):
         residual = x
         y = self.layer(x) + residual # (B, L, F)
         return y
+
+
+class TemporalAggregator(nn.Module):
+
+    agg_fn = {
+        'last': lambda x: x[:, -1, :],
+        'mean': lambda x: torch.mean(x, dim=1)
+    }
+
+    def __init__(self, method='last'):
+        super().__init__()
+        if method not in self.agg_fn.keys():
+            raise ValueError('aggregator method not correct')
+        self.agg = self.agg_fn[method]
+
+    def forward(self, x): # (B, L, F)
+        return self.agg(x)
