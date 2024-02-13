@@ -65,27 +65,16 @@ class LRU(nn.Module):
         G_norm = torch.exp(self.gamma_log).unsqueeze(-1).to(self.B.device)
         B_norm = self.B * G_norm
 
-        ## NOTE: this section requires optimization using parallel scan, it is unusable like this
-        #result = torch.empty_like(x, device=self.B.device)
-        #for i, batch in enumerate(x):
-        #
-        #    result_seq = torch.empty(x.shape[1], self.state_dim)
-        #    for j, step in enumerate(batch):
-        #        self.state = (L_diag * self.state + G_norm * self.B @ step.to(dtype=self.B.dtype))
-        #        out_step = (self.C @ self.state).real  # + self.D @ step
-        #        result_seq[j] = out_step
-        #
-        #    self.state = torch.complex(torch.zeros_like(self.state.real), torch.zeros_like(self.state.real))
-        #    result[i] = result_seq
-
         L_elems = L_diag.tile(x.shape[1], 1)
         B_elems = x.to(B_norm.dtype) @ B_norm.T
 
-        inner_state_fn = lambda B_seq: associative_scan(binary_operator_diag, (L_elems, B_seq))[1]
+        def inner_state_fn(B_seq):
+            return associative_scan(binary_operator_diag, (L_elems, B_seq))[1]
+
         inner_states = torch.vmap(inner_state_fn)(B_elems)
         return (inner_states @ self.C.T).real
 
-    def forward_step(self, x, states): # (J, F), (J, S) dove F = S
+    def forward_step(self, x, states):  # (J, F), (J, S) dove F = S
 
         L_mod = torch.exp(-torch.exp(self.nu_log))
         L_re = L_mod * torch.cos(torch.exp(self.theta_log))
@@ -109,6 +98,7 @@ _activations = {
     'leakyrelu': nn.LeakyReLU
 }
 
+
 class LRULayer(nn.Module):
     """ Wrapper for an LRU. Adds skip connection, normalization and stacking.
     """
@@ -123,16 +113,31 @@ class LRULayer(nn.Module):
         super().__init__()
 
         # NOTE: Uses typical Norm-RNN-Activation-Dropout layout
-        self.layer = nn.Sequential(
-            nn.LayerNorm(state_dim),
-            LRU(state_dim, **kwargs),
-            _activations[activation](),  # Non-linearity,
-            nn.Dropout(p=dropout)
-        )
+        self.norm = nn.LayerNorm(state_dim)
+        self.lru = LRU(state_dim, **kwargs)
+        self.act = _activations[activation]()
+        self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x):  
+    def forward(self, x):  # (B, L, F)
         residual = x
-        y = self.layer(x) + residual # (B, L, F)
+
+        x = self.norm(x)
+        x = self.lru(x)
+        x = self.act(x)
+        x = self.dropout(x)
+
+        y = x + residual  # (B, L, F)
+        return y
+
+    def forward_step(self, x, state):  # (B, F), (B, S)
+        residual = x
+
+        x = self.norm(x)
+        x = self.lru.forward_step(x, state)
+        x = self.act(x)
+        x = self.dropout(x)
+
+        y = x + residual
         return y
 
 
