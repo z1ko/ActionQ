@@ -10,11 +10,11 @@ import pickle
 import random
 import string
 
-VERSION = '0.1.2'
+VERSION = '0.1.3'
 
 # For the homemade training dataset we use only the upper body joints
-UPPER_BODY_JOINT = frozenset([11,12,13,14,15,16])
-UPPER_BODY_CONNECTIONS = frozenset([(12,11),(11,13),(12,14),(13,15),(14,16)])
+#UPPER_BODY_JOINT = frozenset([11,12,13,14,15,16])
+#UPPER_BODY_CONNECTIONS = frozenset([(12,11),(11,13),(12,14),(13,15),(14,16)])
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--camera', type=int, default=0)
@@ -57,7 +57,7 @@ for rep in range(args.repetitions):
     if exit_requested:
         break
 
-    print(f'REPETITION N. {rep}')
+    print(f'REPETITION N. {rep}, START!')
 
     frames = []
     skeleton_frames = []
@@ -73,7 +73,7 @@ for rep in range(args.repetitions):
 
         #print(f'repetition-{rep}-frame-{frame_idx}')
         frame = cv2.flip(frame, 1)
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        #frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         frames.append(frame.copy())
 
         # Extract skeleton
@@ -114,7 +114,7 @@ for rep in range(args.repetitions):
 
             skeleton_frames.append(skeleton)
 
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         cv2.imshow('video', frame)
         frame_idx += 1
 
@@ -122,24 +122,40 @@ for rep in range(args.repetitions):
             exit_requested = True 
             break
    
+    # Ask user for quality of repetition
+    # NOTE: hardcoded
+    cf1 = input('è stato raggiunto l\'apice del movimento [0-5]: ')
+    cf2 = input('è stata raggiunta la posizione di riposo ad ogni ripetizione [0-5]: ')
+    cf3 = input('la postura è stata mantenuta correttamente [0-5]: ')
+    cf4 = input('la velocità dell\'esercizio ha seguito un andamento normale [0-5]: ')
+    cf5 = input('è stato eseguito in modo simmetrico [0-5]: ')
+    cf6 = input('la ripetizione è state eseguita correttamente con le braccia [0-5]: ')
 
-    filename = os.path.join(folder, f'repetition-{rep}-len-{args.lenght}')
+    framerate = len(frames) / args.lenght # framerate effettivo
+    series_folder = os.path.join(folder, f'rep-{rep:03}-frames-{len(frames)}-fps-{framerate}')
+    os.mkdirs(series_folder)
+
+    print(f'saving repetition in {series_folder}')
+
+    # write control factors
+    filepath = os.path.join(series_folder, 'control_factors.csv')
+    with open(filepath, 'wt') as f:
+        f.write(','.join([cf1, cf2, cf3, cf4, cf5]))
 
     # write all frames
-    framerate = len(frames) / args.lenght # framerate effettivo
-    print(f'saving repetition to {filename}, frames={len(frames)}, framerate={framerate}')
-    writer = cv2.VideoWriter(f'{filename}.avi', fourcc, framerate, (args.width, args.height))
-    for frame in frames:
-        writer.write(frame)
+    filepath = os.path.join(series_folder, 'video.avi')
+    writer = cv2.VideoWriter(filepath, fourcc, framerate, (args.width, args.height))
+    map(lambda frame: writer.write(frame), frames)
     writer.release()
 
     # Write all skeleton data
+    filepath = os.path.join(series_folder, 'skeleton.pkl')
     skeleton_merged = np.stack(skeleton_frames) # (frames, joints, features)
-    with open(f'{filename}.skeleton.pkl', 'wb') as f:
+    with open(filepath, 'wb') as f:
         pickle.dump(skeleton_merged, f)
 
     if rep != args.repetitions - 1:
-        print('READY FOR NEXT REPETITION')
+        print('READY FOR NEXT REPETITION...')
         time.sleep(float(args.repetition_delay))
 
 video.release()
