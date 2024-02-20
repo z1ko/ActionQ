@@ -1,7 +1,10 @@
 
-data/raw/
+data/
 logs/
 venv/
+checkpoints/
+lightning_logs/
+notebooks/
 
 # Byte compiled / optimized / DLL files
 __pycache__/
