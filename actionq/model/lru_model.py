@@ -43,10 +43,6 @@ class LRUModel(nn.Module):
                 )
             )
 
-        # Switch to a RNN behaviour
-        if mode == 'predict':
-            self.state = torch.zeros((temporal_layers_count, joint_count, joint_expansion))
-
         # How to aggregate temporal output (BJ, L, F) -> (BJ, F')
         # TODO: Try different aggregators
         self.temporal_aggregator = lambda x: x[:, -1, :]  # torch.mean(x, 1)
@@ -108,25 +104,19 @@ class LRUModel(nn.Module):
 
         return y
 
-    def forward_step(self, x):
-        """ Input x shape (J, F)
+    def forward_with_state(self, x, state):
+        """ Input x shape (J, F), state shape (T, J, S)
         """
 
         assert (self.mode == 'predict')
 
         x = self.initial(x)
+
         for i, temporal_layer in enumerate(self.temporal_layers):
-            x, self.state[i] = temporal_layer.forward_step(x, self.state[i])
-        for i, temporal_layer in enumerate(self.temporal_layers):
-            x, self.state[i] = temporal_layer.forward_step(x, self.state[i])
-
-            x, self.state[i] = temporal_layer.forward_step(x, self.state[i])
+            x, state[i] = temporal_layer.forward_with_state(x, state[i])
 
         # no temporal aggregator, just use last output
-
-        # no temporal aggregator, just use last output
-        x = ein.rearrange(x, 'J D -> (J D)')
-        # no temporal aggregator, just use last output
+        x = self.condenser(x)
         x = ein.rearrange(x, 'J D -> (J D)')
         y = self.final(x)
 

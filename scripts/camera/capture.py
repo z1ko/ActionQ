@@ -10,7 +10,7 @@ import pickle
 import random
 import string
 
-VERSION = '0.1.3'
+VERSION = '0.1.5'
 
 # For the homemade training dataset we use only the upper body joints
 #UPPER_BODY_JOINT = frozenset([11,12,13,14,15,16])
@@ -24,7 +24,6 @@ parser.add_argument('--save_dir', type=str, default='data/raw/capture')
 parser.add_argument('--width', type=int, default=640)
 parser.add_argument('--height', type=int, default=480)
 parser.add_argument('--repetition_delay', type=int, default=5)
-parser.add_argument('--pose_estimator', type=bool, default=True)
 parser.add_argument('--draw_skeleton', default=False, action='store_true')
 
 args = parser.parse_args()
@@ -44,13 +43,12 @@ video.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
 
 fourcc = cv2.VideoWriter_fourcc('M','J','P','G')
 
-if args.pose_estimator:
-    poser = mediapipe.solutions.pose.Pose()
-
 # Unique id for this session
 id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
 folder = os.path.join(args.save_dir, VERSION, id)
 os.makedirs(folder)
+
+poser = mediapipe.solutions.pose.Pose()
 
 exit_requested = False
 for rep in range(args.repetitions):
@@ -76,41 +74,38 @@ for rep in range(args.repetitions):
         #frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         frames.append(frame.copy())
 
-        # Extract skeleton
-        if args.pose_estimator:
+        # We save only the upper body joints and their 2D position on the screen
+        skeleton = np.zeros((33, 2))
 
-            # We save only the upper body joints and their 2D position on the screen
-            skeleton = np.zeros((33, 2))
+        frame.flags.writeable = False
+        results = poser.process(frame)
+        frame.flags.writeable = True
 
-            frame.flags.writeable = False
-            results = poser.process(frame)
-            frame.flags.writeable = True
-
-            if results.pose_landmarks:
+        if results.pose_landmarks:
                 
-                # Draw and save joints
-                skeleton_id = 0
-                for landmark_id, landmark in enumerate(results.pose_landmarks.landmark):
-                    cx, cy = landmark.x, landmark.y
-                    skeleton[skeleton_id] = np.array([cx, cy])
-                    skeleton_id += 1 # Save all skeleton joints
+            # Draw and save joints
+            skeleton_id = 0
+            for landmark_id, landmark in enumerate(results.pose_landmarks.landmark):
+                cx, cy = landmark.x, landmark.y
+                skeleton[skeleton_id] = np.array([cx, cy])
+                skeleton_id += 1 # Save all skeleton joints
                     
-                    if args.draw_skeleton:
-                        cv2.circle(
-                            frame, 
-                            (int(landmark.x * args.width), int(landmark.y * args.height)), 
-                            5, 
-                            (255,0,0), 
-                            cv2.FILLED
-                        )
-
-                # Draw skeleton
                 if args.draw_skeleton:
-                    mediapipe.solutions.drawing_utils.draw_landmarks(
-                        frame,
-                        results.pose_landmarks,
-                        mediapipe.solutions.pose.POSE_CONNECTIONS
+                    cv2.circle(
+                        frame, 
+                        (int(landmark.x * args.width), int(landmark.y * args.height)), 
+                        5, 
+                        (255,0,0), 
+                        cv2.FILLED
                     )
+
+            # Draw skeleton
+            if args.draw_skeleton:
+                mediapipe.solutions.drawing_utils.draw_landmarks(
+                    frame,
+                    results.pose_landmarks,
+                    mediapipe.solutions.pose.POSE_CONNECTIONS
+                )
 
             skeleton_frames.append(skeleton)
 
@@ -124,28 +119,30 @@ for rep in range(args.repetitions):
    
     # Ask user for quality of repetition
     # NOTE: hardcoded
-    cf1 = input('è stato raggiunto l\'apice del movimento [0-5]: ')
-    cf2 = input('è stata raggiunta la posizione di riposo ad ogni ripetizione [0-5]: ')
-    cf3 = input('la postura è stata mantenuta correttamente [0-5]: ')
-    cf4 = input('la velocità dell\'esercizio ha seguito un andamento normale [0-5]: ')
-    cf5 = input('è stato eseguito in modo simmetrico [0-5]: ')
-    cf6 = input('la ripetizione è state eseguita correttamente con le braccia [0-5]: ')
+    #cf1 = input('è stato raggiunto l\'apice del movimento [0-5]: ')
+    #cf2 = input('è stata raggiunta la posizione di riposo ad ogni ripetizione [0-5]: ')
+    #cf3 = input('la postura è stata mantenuta correttamente [0-5]: ')
+    #cf4 = input('la velocità dell\'esercizio ha seguito un andamento normale [0-5]: ')
+    #cf5 = input('è stato eseguito in modo simmetrico [0-5]: ')
+    #cf6 = input('la ripetizione è state eseguita correttamente con le braccia [0-5]: ')
+
+    cf = input('il movimento è stato eseguito correttamente? [0: no, 1: più no che si, 2: più si che no, 3: si]: ')
 
     framerate = len(frames) / args.lenght # framerate effettivo
     series_folder = os.path.join(folder, f'rep-{rep:03}-frames-{len(frames)}-fps-{framerate}')
-    os.mkdirs(series_folder)
+    os.makedirs(series_folder)
 
     print(f'saving repetition in {series_folder}')
 
     # write control factors
     filepath = os.path.join(series_folder, 'control_factors.csv')
     with open(filepath, 'wt') as f:
-        f.write(','.join([cf1, cf2, cf3, cf4, cf5]))
+        f.write(cf) # cf1, cf2, cf3, cf4, cf5
 
     # write all frames
     filepath = os.path.join(series_folder, 'video.avi')
     writer = cv2.VideoWriter(filepath, fourcc, framerate, (args.width, args.height))
-    map(lambda frame: writer.write(frame), frames)
+    for frame in frames: writer.write(frame)
     writer.release()
 
     # Write all skeleton data

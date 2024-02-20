@@ -255,7 +255,7 @@ class KiMoReDataset(torch.utils.data.Dataset):
             # Create a sample for each window
             for frame_begin in range(0, frames_count - window_size, window_delta):
                 # print(f'LOG: creating sample [{frame_begin}-{frame_begin+window_size}]')
-                sample = sample_all[frame_begin:frame_begin + window_delta, :, :]
+                sample = sample_all[frame_begin:frame_begin + window_size, :, :]
                 self.samples.append((sample, target))
 
         if features_expansion:
@@ -310,6 +310,7 @@ class KiMoReDataModule(L.LightningDataModule):
         return DataLoader(
             self.train,
             self.batch_size,
+            drop_last=True,
             shuffle=True
         )
 

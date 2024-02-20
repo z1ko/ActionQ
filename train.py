@@ -2,6 +2,7 @@
 import os
 import argparse
 import pprint
+import datetime
 
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -84,11 +85,12 @@ logger = WandbLogger(project='ActionQ', save_dir='logs/')
 logger.log_hyperparams(vars(args))
 
 # Saves top 5 models
+now = datetime.datetime.now()
 checkpoint_callback = ModelCheckpoint(
     save_top_k=5,
     monitor='validation/loss-mae',
     mode='min',
-    dirpath='checkpoints/',
+    dirpath=f'checkpoints/{now}/',
     filename='actionq-{epoch:03d}-{validation/loss-mae:.4f}',
     auto_insert_metric_name=False,
     every_n_epochs=50,

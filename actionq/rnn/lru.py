@@ -74,8 +74,9 @@ class LRU(nn.Module):
         inner_states = torch.vmap(inner_state_fn)(B_elems)
         return (inner_states @ self.C.T).real
 
-    def forward_step(self, x, states):  # (J, F), (J, S) dove F = S
+    def forward_with_state(self, x, state):  # (J, F), (J, S) dove F = S
 
+        # TODO: (performance) cache instantiation of matrices
         L_mod = torch.exp(-torch.exp(self.nu_log))
         L_re = L_mod * torch.cos(torch.exp(self.theta_log))
         L_im = L_mod * torch.sin(torch.exp(self.theta_log))
@@ -85,11 +86,15 @@ class LRU(nn.Module):
         B_norm = self.B * G_norm
 
         y = torch.zeros_like(x)
+        
+        # state = L_diag * state + B_norm @ x.to(dtype=self.B.dtype)
+        # y = (self.C @ state).real
+        
         for i in range(x.shape[0]):
-            state = L_diag * self.state + B_norm @ x[i, :].to(dtype=self.B.dtype)
-            y[i, :] = (self.C @ state).real
+            state[i] = L_diag * state[i] + B_norm @ x[i].to(dtype=self.B.dtype)
+            y[i] = (self.C @ state[i]).real
 
-        return y, states
+        return y, state
 
 
 _activations = {
@@ -129,16 +134,16 @@ class LRULayer(nn.Module):
         y = x + residual  # (B, L, F)
         return y
 
-    def forward_step(self, x, state):  # (B, F), (B, S)
+    def forward_with_state(self, x, state):  # (N, L, F), (N, S)
         residual = x
 
         x = self.norm(x)
-        x = self.lru.forward_step(x, state)
+        x, state = self.lru.forward_with_state(x, state)
         x = self.act(x)
         x = self.dropout(x)
 
         y = x + residual
-        return y
+        return y, state
 
 
 class TemporalAggregator(nn.Module):
@@ -154,5 +159,5 @@ class TemporalAggregator(nn.Module):
             raise ValueError('aggregator method not correct')
         self.agg = self.agg_fn[method]
 
-    def forward(self, x): # (B, L, F)
+    def forward(self, x):  # (B, L, F)
         return self.agg(x)

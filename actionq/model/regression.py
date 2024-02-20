@@ -31,13 +31,13 @@ class ActionQ(L.LightningModule):
         # mae_loss = torch.nn.functional.l1_loss(results, targets)
 
         criterion = nn.HuberLoss(reduction='mean', delta=1.35)
-        loss = criterion(y_model, y_target)
+        loss = criterion(y_model.squeeze(-1), y_target)
         self.log("train/loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         samples, targets = batch
-        results = self.forward(samples)
+        results = self.forward(samples).squeeze(-1)
         self.log_dict({
             'validation/loss-mae': torch.nn.functional.l1_loss(results, targets),
             'validation/loss-mse': torch.nn.functional.mse_loss(results, targets)
@@ -51,9 +51,8 @@ class ActionQ(L.LightningModule):
             'test/loss-mse': torch.nn.functional.mse_loss(results, targets)
         }, prog_bar=True)
 
-    def predict_step(self, batch, batch_idx):
-        samples, targets = batch
-        return self.forward(samples), targets
+    def predict_step(self, frame, state):  # (J, F)
+        return self.model.forward_with_state(frame, state) * self.maximum_score
 
     def configure_optimizers(self):
         all_parameters = list(self.model.parameters())
