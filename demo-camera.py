@@ -30,12 +30,12 @@ pprint.pprint(vars(args))
 # Load checkpoint
 model = ActionQ.load_from_checkpoint(
     checkpoint_path = args.checkpoint,
-    maximum_score=35.0,
+    maximum_score=30.0,
     model = LRUModel(
         joint_features=4,
         joint_count=len(UPPER_BODY_JOINTS),
-        joint_expansion=256,
-        temporal_layers_count=2,
+        joint_expansion=128,
+        temporal_layers_count=4,
         spatial_layers_count=0,
         output_dim=1,
         dropout=0.2,
@@ -65,8 +65,8 @@ transform = Compose([
 ])
 
 # State of the system
-state = torch.complex(torch.zeros(256), torch.zeros(256))
-state = ein.repeat(state, 'c -> t j c', t=2, j=19)
+state = torch.complex(torch.zeros(128), torch.zeros(128))
+state = ein.repeat(state, 'c -> t j c', t=4, j=len(UPPER_BODY_JOINTS))
 state = state.to(device)
 
 iteration = 0
@@ -138,8 +138,7 @@ while True:
             print(f'score for current frame: {score}')
             scores.append(score)
 
-            #x = scores[:max(-100, -len(scores)+1)]
-            #plt.plot(x, color='b')
+            #plt.plot(scores, color='b')
             #plt.draw()
             #plt.pause(0.001)
 
@@ -149,11 +148,11 @@ while True:
 
     iteration += 1
 
-plt.ioff()
+#plt.ioff()
 
 plt.plot(scores)
 plt.title('model scores')
-plt.ylim(0.0, 35.0)
+plt.ylim(0.0, 30.0)
 plt.show()
 
 plt.plot(poser_times)

@@ -37,6 +37,7 @@ optimizer_opts.add_argument('--learning_rate', type=float, default=0.0001)
 optimizer_opts.add_argument('--epochs', type=int, default=800)
 
 opts = parser.parse_args()
+pprint.pprint(vars(opts))
 
 # makes root joints relative to skeleton subset
 skeleton_root_joints = [UPPER_BODY_JOINTS.index(j) for j in UPPER_BODY_JOINTS_ROOTS]
