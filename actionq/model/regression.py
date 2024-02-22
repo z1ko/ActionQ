@@ -2,6 +2,7 @@ from typing import Any
 import torch
 import torch.nn as nn
 import lightning as L
+import einops as ein
 
 from actionq.loss.rank_n_contrast import RnCLoss
 from actionq.model.lru_model import LRUModel
@@ -31,13 +32,15 @@ class ActionQ(L.LightningModule):
         # mae_loss = torch.nn.functional.l1_loss(results, targets)
 
         criterion = nn.HuberLoss(reduction='mean', delta=1.35)
-        loss = criterion(y_model.squeeze(-1), y_target)
+        #spread_y_target = ein.repeat(y_target.squeeze(-1), 'B -> B L', L=y_model.shape[1])
+        loss = criterion(y_model, y_target)
         self.log("train/loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         samples, targets = batch
-        results = self.forward(samples).squeeze(-1)
+        results = self.forward(samples)
+        #spread_target = ein.repeat(targets.squeeze(-1), 'B -> B L', L=results.shape[1])
         self.log_dict({
             'validation/loss-mae': torch.nn.functional.l1_loss(results, targets),
             'validation/loss-mse': torch.nn.functional.mse_loss(results, targets)
@@ -46,6 +49,7 @@ class ActionQ(L.LightningModule):
     def test_step(self, batch, batch_idx):
         samples, targets = batch
         results = self.forward(samples)
+        #spread_target = ein.repeat(targets, 'B -> B L', L=results.shape[1])
         self.log_dict({
             'test/loss-mae': torch.nn.functional.l1_loss(results, targets),
             'test/loss-mse': torch.nn.functional.mse_loss(results, targets)

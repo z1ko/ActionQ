@@ -11,7 +11,6 @@ import math
 # NOTE: Should use custom kernels
 from actionq.utils.accel import associative_scan, binary_operator_diag
 
-
 class LRU(nn.Module):
     """ Implementation of a Linear Recurrent Unit (LRU)
         https://arxiv.org/pdf/2303.06349.pdf
@@ -51,6 +50,8 @@ class LRU(nn.Module):
         C_re = torch.randn([state_dim, state_dim]) / math.sqrt(state_dim)
         C_im = torch.randn([state_dim, state_dim]) / math.sqrt(state_dim)
         self.C = nn.Parameter(torch.complex(C_re, C_im))
+
+    
 
     def forward(self, x):  # (B, L, F)
         self.state = self.state.to(self.B.device)

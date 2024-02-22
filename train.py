@@ -9,6 +9,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 import lightning as L
 
 from actionq.model.lru_model import LRUModel
+from actionq.model.multibranch import MultibranchModel
 from actionq.dataset.KiMoRe import KiMoReDataModule, skeleton_adj_matrix
 from actionq.model.regression import ActionQ
 # from actionq.model.s4 import AQS4
@@ -21,8 +22,8 @@ parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--batch_size', type=int, default=12)
 parser.add_argument('--window_size', type=int, default=200)
 parser.add_argument('--window_delta', type=int, default=50)
-parser.add_argument('--joint_count', type=int, help='number of joints in the skeleton')
-parser.add_argument('--joint_features', type=int, help='features of each joint in the skeleton')
+parser.add_argument('--joint_count', type=int, default=19, help='number of joints in the skeleton')
+parser.add_argument('--joint_features', type=int, default=6, help='features of each joint in the skeleton')
 parser.add_argument('--joint_expansion', type=int, default=48)
 parser.add_argument('--dropout', type=float, default=0.1)
 parser.add_argument('--temporal_layers_count', type=int, default=6)
@@ -66,14 +67,25 @@ val_dataloader = dataset.val_dataloader()
 #    d_output=1  # Correct-incorrect probability
 # )
 
-model = LRUModel(
+#model = LRUModel(
+#    joint_features=args.joint_features,
+#    joint_count=args.joint_count,
+#    joint_expansion=args.joint_expansion,
+#    temporal_layers_count=args.temporal_layers_count,
+#    spatial_layers_count=args.spatial_layers_count,
+#    output_dim=1,
+#    skeleton=skeleton_adj_matrix(),
+#    dropout=args.dropout,
+#    r_min=args.lru_min_radius,
+#    r_max=args.lru_max_radius
+#)
+
+model = MultibranchModel(
     joint_features=args.joint_features,
     joint_count=args.joint_count,
     joint_expansion=args.joint_expansion,
     temporal_layers_count=args.temporal_layers_count,
-    spatial_layers_count=args.spatial_layers_count,
     output_dim=1,
-    skeleton=skeleton_adj_matrix(),
     dropout=args.dropout,
     r_min=args.lru_min_radius,
     r_max=args.lru_max_radius

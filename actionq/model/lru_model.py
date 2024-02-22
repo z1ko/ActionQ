@@ -89,17 +89,22 @@ class LRUModel(nn.Module):
         for temporal_layer in self.temporal_layers:
             x = temporal_layer(x)
 
-        x = self.temporal_aggregator(x)
-
         # Process spatial nodes (B, J, F) -> (B, J, F')
         # x = ein.rearrange(x, '(B J) F -> B J F', B=B, J=J)
         # for spatial_layer in self.spatial_layers:
         #    x = spatial_layer(x)
 
+
         # Concatenate all nodes representation
-        x = self.condenser(x)  # (BJ, F) -> (BJ, F')
-        x = ein.rearrange(x, '(B J) F -> B (J F)', B=B, J=J)
-        # x = torch.sum(x, dim=1)  # (B F)
+        # NOTE: considers only the last frame
+        # x = self.temporal_aggregator(x)
+        # x = self.condenser(x)  # (BJ, F) -> (BJ, F')
+        # x = ein.rearrange(x, '(B J) F -> B (J F)', B=B, J=J)
+        # y = self.final(x)
+
+        # Doesn't concatenate in time
+        x = self.condenser(x) # (BJ, L, F) -> (BJ, L, F')
+        x = ein.rearrange(x, '(B J) L F -> B L (J F)', B=B, J=J)
         y = self.final(x)
 
         return y
@@ -118,6 +123,6 @@ class LRUModel(nn.Module):
         # no temporal aggregator, just use last output
         x = self.condenser(x)
         x = ein.rearrange(x, 'J D -> (J D)')
-        y = self.final(x)
+        y = self.final(x).squeeze(-1)
 
         return y
